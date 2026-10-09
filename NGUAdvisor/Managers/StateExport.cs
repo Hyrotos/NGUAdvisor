@@ -50,7 +50,8 @@ namespace NGUAdvisor.Managers
             }
         }
 
-        // Returns the path written, or null on failure (already logged).
+        // Returns the path written -- as the HOST sees it, so under Proton it is the Linux path the
+        // user can open, not the C:\ one that only exists inside Wine -- or null on failure (logged).
         public static string Write()
         {
             try
@@ -58,8 +59,9 @@ namespace NGUAdvisor.Managers
                 string text = Build();
                 string path = FilePath;
                 File.WriteAllText(path, text);
-                Main.Log($"State exported to {path}");
-                return path;
+                string shown = HostPath.For(path);
+                Main.Log($"State exported to {shown}");
+                return shown;
             }
             catch (Exception e)
             {

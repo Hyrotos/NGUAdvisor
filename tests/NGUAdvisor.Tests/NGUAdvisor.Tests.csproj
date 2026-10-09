@@ -110,6 +110,7 @@
     <Compile Include="..\..\NGUAdvisor\Managers\GearChain.cs" Link="Linked\GearChain.cs" />
     <Compile Include="..\..\NGUAdvisor\Managers\TitanDropTables.cs" Link="Linked\TitanDropTables.cs" />
     <Compile Include="..\..\NGUAdvisor\Managers\QuestGearSet.cs" Link="Linked\QuestGearSet.cs" />
+    <Compile Include="..\..\NGUAdvisor\Managers\HostPath.cs" Link="Linked\HostPath.cs" />
     <!-- "I must survive this fight" -> a gear-stat number. The arithmetic is separated from the live
          read precisely so it can be linked here: a wrong multiplier is a SILENT wrong answer — no
          throw, nothing odd-looking, just a floor in the wrong units marking an unsurvivable set
