@@ -1142,6 +1142,15 @@
   .peg-step .tle-sel { min-width: 0; flex: 1 1 0; }
   .peg-step .peg-slots { flex: 0 1 190px; }
   .lo-chain { margin-top: var(--sp-2); }
+  /* Priority / consumable rows in the profile editor: the loadout list's row, holding pickers. */
+  .pr-row { flex-wrap: wrap; }
+  .pr-row .pr-type { flex: 2 1 190px; min-width: 0; width: auto; }
+  .pr-row select.pr-idx { flex: 1 1 150px; min-width: 0; width: auto; }
+  .pr-row input.pr-idx { width: 84px; }
+  .pr-row span.pr-idx { flex: 1 1 150px; text-align: center; }
+  .pr-row .tin { width: 64px; }
+  .pr-row .pr-opt { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-3); color: var(--muted); white-space: nowrap; }
+  .pr-row .pr-raw { font-family: var(--mono); font-size: var(--fs-4); }
   .peg-spell { font-family: var(--mono); font-size: var(--fs-2); color: var(--muted); overflow-wrap: anywhere; }
   /* .tin hard-sets width:46px, and with border-box that leaves 34px of text — about five characters
      of 11px mono, before a number input's spinner takes another ~17px. So the placeholders rendered as
@@ -5178,6 +5187,151 @@
       if(have.indexOf(i)<0) html+='<option value="'+i+'">'+esc(PE_SLOT_NAMES[i])+' <'+i+'></option>';
     sel.innerHTML = html || '<option value="">(all added)</option>';
   }
+  /* THE ROW FORMS — priorities (Energy / Magic / R3) and consumables.
+     These payloads are comma-separated TOKENS ("CAPNGU-3:50", "MUFFIN:5"), and the editor used to ask
+     for exactly that in one text field, grammar in a hint line. Knowing that NGU-3 is "Gold" or that
+     AUG-13 is the Laser Sword's upgrade was the user's job. Each token is a row of pickers now.
+
+     The vocabulary is ED_CAT, published by the advisor (EditorCatalog / PriorityCatalog), so the
+     pickers can only offer what this build understands; until it has arrived the editor keeps the
+     plain text field rather than show pickers with nothing in them.
+
+     The rows spell the SAME payload string the text field took, into the same hidden input — no new
+     command and no new server path. And it is only rewritten once a row is TOUCHED: opening a
+     breakpoint and saving something else on it leaves a hand-written payload byte-for-byte alone.
+     A token the catalog does not know is kept as its own read-only row, never dropped. */
+  var ED_CAT = null;
+  var PR = { mode:"", types:[], rows:[] };
+  function prTypes(sys){ return (ED_CAT && ED_CAT.priority && ED_CAT.priority[sys]) || null; }
+  function prType(code){ for(var i=0;i<PR.types.length;i++) if(PR.types[i].code===code) return PR.types[i]; return null; }
+  // [CAP]BASE[-index][:percent] — the same reading as PriorityCatalog.Parse.
+  function prParseToken(tok){
+    var raw=String(tok||"").trim(), t=raw.toUpperCase(), row={ cap:false, code:"", idx:"", pctOn:false, pct:"" };
+    var ci=t.indexOf(":");
+    if(ci>=0){
+      var pn=parseInt(t.slice(ci+1),10);
+      if(isNaN(pn)) return { raw:raw };
+      row.pctOn=true; row.pct=String(Math.max(0, Math.min(100, pn))); t=t.slice(0,ci);
+    }
+    if(t.indexOf("CAP")===0){ row.cap=true; t=t.slice(3); }
+    var di=t.indexOf("-");
+    if(di>=0){
+      var ix=parseInt(t.slice(di+1),10);
+      if(isNaN(ix) || ix<0) return { raw:raw };
+      row.idx=String(ix); t=t.slice(0,di);
+    }
+    var ty=prType(t);
+    if(!ty || (row.idx!=="" && (!ty.hasIndex || +row.idx>ty.max))) return { raw:raw };
+    row.code=ty.code;
+    return row;
+  }
+  function prSpellRow(r){
+    if(r.raw!==undefined) return r.raw;
+    if(PR.mode==="cons") return r.code + (r.amt!=="" && +r.amt>1 ? ":"+r.amt : "");
+    var ty=prType(r.code);
+    return (r.cap?"CAP":"") + r.code + (ty && ty.hasIndex && r.idx!=="" ? "-"+r.idx : "") + (r.pctOn && r.pct!=="" ? ":"+r.pct : "");
+  }
+  function prSpell(){ return PR.rows.map(prSpellRow).filter(function(x){ return x!==""; }).join(", "); }
+  function prLoad(sys, payload){
+    var toks=String(payload||"").split(",").map(function(x){ return x.trim(); }).filter(function(x){ return x; });
+    if(sys==="consumables"){
+      PR.mode="cons"; PR.types=(ED_CAT.consumables||[]).map(function(c){ return { code:c[0], label:c[1] }; });
+      PR.rows=toks.map(function(tok){
+        var ci=tok.indexOf(":"), code=(ci>=0?tok.slice(0,ci):tok).toUpperCase(), amt=ci>=0?parseInt(tok.slice(ci+1),10):NaN;
+        if(!prType(code) || (ci>=0 && (isNaN(amt) || amt<1))) return { raw:tok };
+        return { code:code, amt: ci>=0 ? String(amt) : "" };
+      });
+    } else {
+      PR.mode="prio"; PR.types=prTypes(sys)||[];
+      PR.rows=toks.map(prParseToken);
+    }
+  }
+  function prNewRow(){
+    var ty=PR.types[0]; if(!ty) return null;
+    return PR.mode==="cons" ? { code:ty.code, amt:"" }
+                            : { cap:false, code:ty.code, idx: ty.hasIndex && ty.names ? "0" : "", pctOn:false, pct:"" };
+  }
+  function prRowHtml(r, i){
+    var n=PR.rows.length, body;
+    if(r.raw!==undefined){
+      body='<span class="pr-raw">'+esc(r.raw)+'</span><span class="le-note">not something this editor knows — kept as written</span>';
+    } else {
+      var tsel=PR.types.map(function(t){
+        return '<option value="'+esc(t.code)+'"'+(t.code===r.code?' selected':'')+'>'+esc(t.code+" — "+t.label)+'</option>'; }).join("");
+      body='<select class="inp tle-sel pr-type" data-pr="code" aria-label="Row '+(i+1)+' type">'+tsel+'</select>';
+      if(PR.mode==="cons"){
+        body+='<input class="inp tin" data-pr="amt" type="number" min="1" placeholder="1" value="'+esc(r.amt)+'" aria-label="Row '+(i+1)+' amount">'+
+              '<span class="mut">×</span>';
+      } else {
+        var ty=prType(r.code);
+        if(ty && ty.hasIndex && ty.names){
+          body+='<select class="inp tle-sel pr-idx" data-pr="idx" aria-label="Row '+(i+1)+' which one">'+
+            (r.idx==="" ? '<option value="" selected>(none)</option>' : '')+
+            ty.names.map(function(nm, k){
+              return '<option value="'+k+'"'+(String(k)===r.idx?' selected':'')+'>'+k+' — '+esc(nm)+'</option>'; }).join("")+'</select>';
+        } else if(ty && ty.hasIndex){
+          body+='<input class="inp tin pr-idx" data-pr="idx" type="number" min="0" max="'+ty.max+'" placeholder="—" value="'+esc(r.idx)+'" aria-label="Row '+(i+1)+' number">';
+        } else {
+          body+='<span class="pr-idx mut" aria-hidden="true">—</span>';
+        }
+        body+='<label class="pr-opt"><input type="checkbox" data-pr="cap"'+(r.cap?' checked':'')+'> Cap</label>'+
+              '<label class="pr-opt"><input type="checkbox" data-pr="pctOn"'+(r.pctOn?' checked':'')+'> manual</label>'+
+              '<input class="inp tin" data-pr="pct" type="number" min="0" max="100" value="'+esc(r.pct)+'"'+(r.pctOn?'':' disabled')+' aria-label="Row '+(i+1)+' percent">'+
+              '<span class="mut">%</span>';
+      }
+    }
+    return '<div class="le-row pr-row" data-i="'+i+'"><span class="ix">'+(i+1)+'</span>'+body+
+      '<span class="le-ctrls">'+
+      '<button class="le-btn" type="button" data-prmove="up" aria-label="Move row '+(i+1)+' up"'+(i===0?' disabled':'')+'>↑</button>'+
+      '<button class="le-btn" type="button" data-prmove="down" aria-label="Move row '+(i+1)+' down"'+(i===n-1?' disabled':'')+'>↓</button>'+
+      '<button class="le-btn" type="button" data-prremove aria-label="Remove row '+(i+1)+'">✕</button>'+
+      '</span></div>';
+  }
+  function prDraw(ed){
+    var box=ed.querySelector("#peRows"); if(!box) return;
+    box.innerHTML = PR.rows.map(prRowHtml).join("") ||
+      '<div class="tle-hint mut">Nothing listed — this breakpoint '+(PR.mode==="cons" ? "uses no consumables." : "funds nothing.")+'</div>';
+  }
+  // A row control was used: update the state, and from now on the rows ARE the payload.
+  function prEvent(ed, t, isClick){
+    var row=t.closest ? t.closest(".pr-row") : null, i=row ? parseInt(row.getAttribute("data-i"),10) : -1;
+    var r=PR.rows[i], redraw=true;
+    if(!isClick){
+      var k=t.getAttribute && t.getAttribute("data-pr"); if(!k || !r || r.raw!==undefined) return false;
+      if(k==="cap" || k==="pctOn"){
+        r[k]=!!t.checked;
+        if(k==="pctOn" && r.pctOn && r.pct==="") r.pct="50";
+      } else if(k==="code"){
+        r.code=t.value;
+        var ty=prType(r.code);
+        if(PR.mode==="prio") r.idx = ty && ty.hasIndex && ty.names ? "0" : "";   // the old number meant something else
+      } else {
+        var v=String(t.value).trim(), num=parseInt(v,10);
+        r[k] = v==="" || isNaN(num) || num<0 ? "" : String(k==="pct" ? Math.min(100,num) : num);
+        redraw = false;   // typing in a number field must not rebuild the field under the caret
+      }
+    } else if(t.id==="peRowsAdd"){
+      var nr=prNewRow(); if(nr) PR.rows.push(nr);
+    } else if(t.hasAttribute && t.hasAttribute("data-prremove")){
+      if(!r) return false; PR.rows.splice(i,1);
+    } else if(t.getAttribute && t.getAttribute("data-prmove")){
+      var j = t.getAttribute("data-prmove")==="up" ? i-1 : i+1;
+      if(!r || j<0 || j>=PR.rows.length) return false;
+      PR.rows[i]=PR.rows[j]; PR.rows[j]=r;
+    } else return false;
+    if(redraw) prDraw(ed);
+    var hidden=ed.querySelector('[data-k="payload"]'); if(hidden) hidden.value = prSpell();
+    return true;
+  }
+
+  // A number typed into a row counts the moment it is typed, not only when the field loses focus:
+  // "change" on a text-like input fires on blur, and Save must never read a payload one edit behind.
+  document.addEventListener("input", function(e){
+    var t=e.target;
+    if(!t || !t.matches || !t.matches('input[type="number"][data-pr]')) return;
+    var red=document.querySelector(".tl-editor"); if(red) prEvent(red, t, false);
+  });
+
   function closeEditor(){
     var e=document.querySelector(".tl-editor"); if(e&&e.parentNode) e.parentNode.removeChild(e);
     PE_SLOT_NAMES=null; BLISTS.peSlots.arr=[]; BLISTS.peSlots.built=false;
@@ -5273,6 +5427,38 @@
         var csel2=CHALLENGES.map(function(c){ return '<option value="'+c[0]+'"'+(c[0]===(d.challenge||"")?' selected':'')+'>'+esc(c[1])+'</option>'; }).join('');
         bodyHtml+='<div class="tle-row"><label>Challenge</label><select class="tle-sel" data-k="challenge">'+csel2+'</select></div>';
       }
+    } else if(ED_CAT && (prTypes(sys) || (sys==="consumables" && ED_CAT.consumables))){
+      // Priorities and consumables: one row of pickers per token (see THE ROW FORMS above).
+      prLoad(sys, d.payload||"");
+      var cons = sys==="consumables";
+      bodyHtml='<div class="tle-row"><label>'+(cons?"Use":"Priorities")+'</label><span class="tle-wide">'+
+                 '<div class="listed" id="peRows"></div>'+
+                 '<div class="le-add"><button class="btn" type="button" id="peRowsAdd">'+(cons?"Add consumable":"Add priority")+'</button></div>'+
+               '</span></div>'+
+               '<input type="hidden" data-k="payload" value="'+esc(d.payload||"")+'">'+
+               '<div class="tle-hint">'+(cons
+                 ? 'Each is used once when this breakpoint starts; the number is how many.'
+                 : 'Funded top to bottom. <b>Cap</b> is the CAP… form of a priority. <b>Manual %</b> takes that lane out of the '+
+                   'advisor’s hands — you set its share yourself. It is ignored on Wandoos, and while Auto Profile is on, '+
+                   'which writes these lists itself.')+'</div>';
+      if(meta.chal){
+        var cselR=CHALLENGES.map(function(c){ return '<option value="'+c[0]+'"'+(c[0]===(d.challenge||"")?' selected':'')+'>'+esc(c[1])+'</option>'; }).join('');
+        bodyHtml+='<div class="tle-row"><label>Challenge</label><select class="tle-sel" data-k="challenge">'+cselR+'</select></div>';
+      }
+    } else if(ED_CAT && ED_CAT[sys] && (sys==="wandoos" || sys==="ngudiff")){
+      // A single choice out of three: a picker, storing the same 0 / 1 / 2 the text field took.
+      var cur=String(d.payload==null?"":d.payload).trim(), names=ED_CAT[sys];
+      var known = /^\d+$/.test(cur) && +cur < names.length;
+      bodyHtml='<div class="tle-row"><label>'+(sys==="wandoos"?"Wandoos OS":"NGU difficulty")+'</label>'+
+               '<select class="tle-sel" data-k="payload">'+
+               (known || cur==="" ? '' : '<option value="'+esc(cur)+'" selected>'+esc(cur)+' (not recognised)</option>')+
+               names.map(function(nm, k){ return '<option value="'+k+'"'+(String(k)===cur?' selected':'')+'>'+esc(nm)+'</option>'; }).join('')+
+               '</select></div>'+
+               (sys==="wandoos" ? '<div class="tle-hint">Changing the OS resets Wandoos levels — the game’s rule, not the advisor’s.</div>' : '');
+      if(meta.chal){
+        var cselW=CHALLENGES.map(function(c){ return '<option value="'+c[0]+'"'+(c[0]===(d.challenge||"")?' selected':'')+'>'+esc(c[1])+'</option>'; }).join('');
+        bodyHtml+='<div class="tle-row"><label>Challenge</label><select class="tle-sel" data-k="challenge">'+cselW+'</select></div>';
+      }
     } else {
       bodyHtml='<div class="tle-row"><label>Payload</label><input class="tle-wide" data-k="payload" value="'+esc(d.payload||"")+'"></div>'+
                '<div class="tle-hint">'+esc(meta.hint||"")+'</div>';
@@ -5301,6 +5487,7 @@
   function peAfterMount(ed){
     if(!ed) return;
     if(ed.querySelector("#peLocks")){ drawList("peLocks"); peDrawChain(ed); peSyncGear(ed); return; }
+    if(ed.querySelector("#peRows")){ prDraw(ed); return; }
     if(!ed.querySelector("#peSlots")) return;
     drawList("peSlots");
     peBuildAdd();
@@ -5309,7 +5496,8 @@
   function focusEditor(ed){
     // The slot editor's first real control is the Add picker; the payload input is hidden there.
     // The gear editor leads with the objective, because that is the decision the rest hangs off.
-    var f=ed.querySelector('#pegObj') || ed.querySelector('#peSlotsAdd') ||
+    var f=ed.querySelector('#pegObj') || ed.querySelector('#peSlotsAdd') || ed.querySelector('.pr-row select') ||
+          ed.querySelector('#peRowsAdd') ||
           ed.querySelector('[data-k="payload"],[data-k="target"]');
     if(f && f.type!=="hidden"){ try{ f.focus(); if(f.select) f.select(); }catch(e){} }
   }
@@ -6109,6 +6297,7 @@
   function renderGearObjectives(s){
     if(s.gearObjectives && !GEAR_OBJECTIVES) GEAR_OBJECTIVES = s.gearObjectives.slice();
     if(s.gearChainNames && !PE_CHAIN_NAMES) PE_CHAIN_NAMES = s.gearChainNames.slice();
+    if(s.editorCatalog && !ED_CAT) ED_CAT = s.editorCatalog;
     if(_gearObjBuilt || !s.gearObjectives) return;
     var sels=document.querySelectorAll('select[data-dyn="gearObjectives"]'); if(!sels.length) return;
     var tail=s.gearObjectives.map(function(n){ return '<option value="'+esc(n)+'">'+esc(n)+'</option>'; }).join("");
@@ -6790,6 +6979,8 @@
         peSyncPayload();
       } else if(t.matches && t.matches('[data-cstep],.cs-pin')){
         chainDispatch(t, false);
+      } else if(t.matches && t.matches('[data-pr]')){
+        var red=document.querySelector(".tl-editor"); if(red) prEvent(red, t, false);
       } else if(t.matches && t.matches('[data-k="gearobj"],[data-k="gearresp"]')){
         // Gear Lock: the objective and the respawn switch serialise into the same payload as the
         // locked-item list. Deliberately NOT [data-setting] — this is breakpoint content that saves
@@ -7029,6 +7220,10 @@
       // above — it saves with the breakpoint, not as a setting (see listSend's `local` branch).
       if(e.target && e.target.matches && e.target.matches(".cs-add,[data-cstepmove],[data-cstepremove]")){
         if(chainDispatch(e.target, true)) return;
+      }
+      if(e.target && e.target.matches && e.target.matches("#peRowsAdd,[data-prmove],[data-prremove]")){
+        var red=document.querySelector(".tl-editor");
+        if(red && prEvent(red, e.target, true)) return;
       }
       if(e.target && e.target.id === "peLocksAddBtn"){
         var idIn=$("peLocksAdd");

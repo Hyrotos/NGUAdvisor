@@ -1139,6 +1139,98 @@ window.addEventListener("load", guard(() => {
       ok("the text payload is still editable, not hidden",
          !!(ed && ed.querySelector('input[data-k="payload"]').type !== "hidden"));
 
+      // ── THE ROW FORMS ─────────────────────────────────────────────────────────────────────────
+      // Once the advisor has published its vocabulary, the token payloads are rows of pickers. The
+      // catalog below is the shape UiBridge sends (EditorCatalog / PriorityCatalog).
+      {
+        const T = (code, label, max, names) => ({ code, label, hasIndex: max !== undefined, max: max || 0, names });
+        send(baseSnapshot({ editorCatalog: {
+          priority: {
+            energy: [T("NGU", "NGU (by number)", 8, ["Augs","Wandoos","Respawn","Gold","Adv-α","Power-α","DropCh","Magic","PP"]),
+                     T("ALLNGU", "All NGUs"), T("AT", "Advanced Training (by number)", 4, ["Toughness","Power","Block","Wandoos Energy","Wandoos Magic"]),
+                     T("WAN", "Wandoos (energy)"), T("TM", "Time Machine (energy)"), T("BESTAUG", "Best Augment"), T("ALLBT", "All Basic Training")],
+            magic:  [T("NGU", "NGU (by number)", 6, ["Ygg","EXP","Power-β","Number","TM","Energy","Adv-β"]),
+                     T("BR", "Blood Rituals — cast (optional -seconds limit)", 86400), T("TM", "Time Machine (magic)")],
+            r3:     [T("HACK", "Hack (by number)", 14, ["Attack/Defense","Adventure","Time Machine","Drop Chance","Augment Speed","Energy NGU",
+                       "Magic NGU","Blood","QP","Daycare","EXP","NUMBER","PP","Hack Hack","Wish"]), T("ALLHACK", "All Hacks")]
+          },
+          wandoos: ["Wandoos 98", "Wandoos Meh", "Wandoos XL"],
+          ngudiff: ["Normal", "Evil", "Sadistic"],
+          consumables: [["EPOT-A", "Energy Potion A"], ["MUFFIN", "Muffin"], ["LC", "Lucky Charm"]]
+        } }));
+        const fireR = (el, type) => el.dispatchEvent(new window.Event(type, { bubbles: true }));
+        const rows = e => Array.from(e.querySelectorAll("#peRows .pr-row"));
+        const field = (e, i, k) => rows(e)[i].querySelector('[data-pr="' + k + '"]');
+
+        ed = openBp("energy", "CAPALLBT, TM:40, AT-0:20, AT-1:25, BESTAUG");
+        ok("energy priorities open as rows, not a text field",
+           !!(ed && ed.querySelector("#peRows")) && ed.querySelector('[data-k="payload"]').type === "hidden" && rows(ed).length === 5,
+           ed && String(rows(ed).length));
+        ok("opening leaves the payload byte-for-byte alone",
+           payloadOf(ed) === "CAPALLBT, TM:40, AT-0:20, AT-1:25, BESTAUG", payloadOf(ed));
+        ok("a CAP token ticks Cap and picks its type", field(ed, 0, "code").value === "ALLBT" && field(ed, 0, "cap").checked);
+        ok("a percent ticks manual and fills the number",
+           field(ed, 1, "code").value === "TM" && field(ed, 1, "pctOn").checked && field(ed, 1, "pct").value === "40" && !field(ed, 1, "cap").checked);
+        ok("an index is shown by NAME", field(ed, 2, "idx").value === "0" && /0 — Toughness/.test(field(ed, 2, "idx").textContent),
+           field(ed, 2, "idx").textContent);
+        ok("a type without an index offers none", !field(ed, 4, "idx") && field(ed, 4, "pct").disabled);
+
+        field(ed, 3, "idx").value = "2"; fireR(field(ed, 3, "idx"), "change");
+        ok("picking another index rewrites that token",
+           payloadOf(ed) === "CAPALLBT, TM:40, AT-0:20, AT-2:25, BESTAUG", payloadOf(ed));
+        field(ed, 1, "pct").value = "55"; fireR(field(ed, 1, "pct"), "input");
+        ok("a typed percent counts before the field loses focus", /TM:55/.test(payloadOf(ed)), payloadOf(ed));
+        ok("typing does not rebuild the field under the caret", field(ed, 1, "pct").value === "55");
+        field(ed, 1, "pctOn").checked = false; fireR(field(ed, 1, "pctOn"), "change");
+        ok("unticking manual drops the percent", /^CAPALLBT, TM, AT-0:20/.test(payloadOf(ed)), payloadOf(ed));
+        field(ed, 4, "code").value = "NGU"; fireR(field(ed, 4, "code"), "change");
+        ok("changing the type starts at its first index", /, NGU-0$/.test(payloadOf(ed)) && /0 — Augs/.test(field(ed, 4, "idx").textContent), payloadOf(ed));
+        fireR(rows(ed)[4].querySelector('[data-prmove="up"]'), "click");
+        ok("a row moves up", /, NGU-0, AT-2:25$/.test(payloadOf(ed)), payloadOf(ed));
+        fireR(rows(ed)[0].querySelector("[data-prremove]"), "click");
+        ok("a row is removed", payloadOf(ed) === "TM, AT-0:20, NGU-0, AT-2:25", payloadOf(ed));
+        fireR(ed.querySelector("#peRowsAdd"), "click");
+        ok("Add priority appends the first type", payloadOf(ed) === "TM, AT-0:20, NGU-0, AT-2:25, NGU-0" && rows(ed).length === 5, payloadOf(ed));
+
+        // A token this build does not know is kept, visibly, and survives edits around it.
+        ed = openBp("energy", "ngu-3, FROB-2, WAN");
+        ok("an unknown token gets its own read-only row",
+           rows(ed).length === 3 && !field(ed, 1, "code") && /FROB-2/.test(rows(ed)[1].textContent) && /kept as written/.test(rows(ed)[1].textContent));
+        fireR(rows(ed)[2].querySelector("[data-prremove]"), "click");
+        ok("and is written back verbatim", payloadOf(ed) === "NGU-3, FROB-2", payloadOf(ed));
+
+        // The same code means different things per resource, and a number-only index stays a number.
+        ed = openBp("magic", "NGU-3, BR-3600, BR");
+        ok("magic NGU-3 is Number, not Gold", /3 — Number/.test(field(ed, 0, "idx").textContent) && !/Gold/.test(field(ed, 0, "idx").textContent));
+        ok("a seconds limit is a number field", field(ed, 1, "idx").type === "number" && field(ed, 1, "idx").value === "3600");
+        ok("an optional index left out stays left out", field(ed, 2, "idx").value === "");
+        fireR(field(ed, 0, "cap"), "change");
+        ok("which round-trips", payloadOf(ed) === "NGU-3, BR-3600, BR", payloadOf(ed));
+        ed = openBp("r3", "HACK-13, ALLHACK");
+        ok("hacks are named", /13 — Hack Hack/.test(field(ed, 0, "idx").textContent));
+
+        ed = openBp("consumables", "LC, MUFFIN:5, WAT");
+        ok("consumables open as rows", rows(ed).length === 3 && field(ed, 0, "code").value === "LC" && field(ed, 1, "amt").value === "5");
+        ok("an unknown consumable is kept as written", !field(ed, 2, "code") && /WAT/.test(rows(ed)[2].textContent));
+        field(ed, 0, "amt").value = "3"; fireR(field(ed, 0, "amt"), "input");
+        ok("an amount is written as CODE:n", payloadOf(ed) === "LC:3, MUFFIN:5, WAT", payloadOf(ed));
+        field(ed, 0, "amt").value = "1"; fireR(field(ed, 0, "amt"), "input");
+        ok("an amount of one is just the code", payloadOf(ed) === "LC, MUFFIN:5, WAT", payloadOf(ed));
+
+        ed = openBp("wandoos", "1");
+        const wsel = ed.querySelector('select[data-k="payload"]');
+        ok("Wandoos OS is a picker of names", !!wsel && wsel.value === "1" && /Wandoos Meh/.test(wsel.textContent));
+        ed = openBp("ngudiff", "2");
+        ok("NGU difficulty is a picker of names",
+           ed.querySelector('select[data-k="payload"]').value === "2" && /Sadistic/.test(ed.querySelector('select[data-k="payload"]').textContent));
+        ed = openBp("ngudiff", "7");
+        ok("a value outside the list is kept, flagged",
+           ed.querySelector('select[data-k="payload"]').value === "7" && /not recognised/.test(ed.querySelector('select[data-k="payload"]').textContent));
+
+        ed = openBp("energy", "");
+        ok("an empty priority list says so and stays empty", rows(ed).length === 0 && payloadOf(ed) === "" && /funds nothing/.test(ed.querySelector("#peRows").textContent));
+      }
+
       // The slot vocabularies must match the injector's own tables, or a slot is called one thing in
       // the editor and another in the logs.
       const srcTxt = fs.readFileSync(FILE, "utf8");

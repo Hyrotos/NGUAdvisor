@@ -85,6 +85,7 @@ namespace NGUAdvisor.Managers
         private JSONObject _macguffinsCache;             // static macguffin id->name map (FavoredMacguffin dropdown); built once
         private JSONObject _zonesCache;                  // static non-titan zone id->name map (SnipeZone / GearHuntZone dropdowns); built once
         private JSONObject _advEnemiesCache;             // static adventure enemy spriteId->name map (blacklist picker); built once
+        private JSONObject _editorCatalogCache;          // static: what the profile editor's pickers offer (EditorCatalog)
         private JSONArray _gearChainNamesCache;          // the named chains among them: selectable, but not usable as a chain STEP
         private JSONArray _gearObjectivesCache;          // static gear-objective name list (loadout Advisor dropdowns); built once
         private JSONArray _transformMetaCache;           // transform-chain {name, step} descriptors (grid labels); refreshed ~every 5s
@@ -1723,6 +1724,58 @@ namespace NGUAdvisor.Managers
                 }
                 if (_gearObjectivesCache != null) root["gearObjectives"] = _gearObjectivesCache;
                 if (_gearChainNamesCache != null) root["gearChainNames"] = _gearChainNamesCache;
+            });
+
+            // --- profile-editor pickers (static; built once). The token types each resource has, how
+            //     far their index runs and what each index is called, plus the three small vocabularies
+            //     the single-value rows use. Published rather than mirrored in the page, so the editor
+            //     can never offer a token this build does not understand. ---
+            Safe("editorCatalog", () =>
+            {
+                if (_editorCatalogCache == null)
+                {
+                    var cat = new JSONObject();
+                    var prio = new JSONObject();
+                    foreach (ResourceKind kind in Enum.GetValues(typeof(ResourceKind)))
+                    {
+                        var list = new JSONArray();
+                        foreach (var bt in PriorityCatalog.For(kind))
+                        {
+                            var t = new JSONObject();
+                            t["code"] = bt.Code;
+                            t["label"] = bt.Label;
+                            t["hasIndex"] = bt.HasIndex;
+                            t["max"] = bt.IndexMax;
+                            var names = EditorCatalog.IndexNames(kind, bt.Code);
+                            if (names != null)
+                            {
+                                var n = new JSONArray();
+                                foreach (var name in names) n.Add(name);
+                                t["names"] = n;
+                            }
+                            list.Add(t);
+                        }
+                        prio[kind == ResourceKind.Energy ? "energy" : kind == ResourceKind.Magic ? "magic" : "r3"] = list;
+                    }
+                    cat["priority"] = prio;
+
+                    var wandoos = new JSONArray();
+                    foreach (var kv in SystemCatalog.WandoosOS) wandoos.Add(kv.Value);
+                    cat["wandoos"] = wandoos;
+                    var diff = new JSONArray();
+                    foreach (var kv in SystemCatalog.Difficulty) diff.Add(kv.Value);
+                    cat["ngudiff"] = diff;
+                    var cons = new JSONArray();
+                    foreach (var kv in SystemCatalog.Consumables)
+                    {
+                        var c2 = new JSONArray();
+                        c2.Add(kv.Key); c2.Add(kv.Value);
+                        cons.Add(c2);
+                    }
+                    cat["consumables"] = cons;
+                    _editorCatalogCache = cat;
+                }
+                root["editorCatalog"] = _editorCatalogCache;
             });
 
             // --- wish priority + blacklist (int[] wish ids); written each snapshot like boostLists. ---
