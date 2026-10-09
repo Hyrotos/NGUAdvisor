@@ -133,5 +133,43 @@ namespace NGUAdvisor.Tests
             Assert.Equal(Score(new[] { plain }, GearObjectives.Stat.DropChance),
                          Score(new[] { loaded }, GearObjectives.Stat.DropChance), 10);
         }
+
+        [Theory]
+        [InlineData(GearObjectives.Stat.Respawn, 0.0)]
+        [InlineData(GearObjectives.Stat.Power, 0.0)]
+        [InlineData(GearObjectives.Stat.Toughness, 0.0)]
+        [InlineData(GearObjectives.Stat.DropChance, 100.0)]
+        [InlineData(GearObjectives.Stat.GoldDrops, 100.0)]
+        public void BaseValue_IsZeroOnlyForTheThreeAdditiveStats(string stat, double expected) =>
+            Assert.Equal(expected, GearScorer.BaseValue(stat));
+
+        // The game floors the respawn factor at 0.2 (decomp AdventureController.respawnTime), so a
+        // gear Respawn total past 80% buys NOTHING. Scoring it linearly told the optimizer that the
+        // 81st point was worth as much as the first.
+        [Fact]
+        public void RespawnTotal_IsCappedAtTheGamesFloor()
+        {
+            var atCap = new[] { Item(false, (GearObjectives.Stat.Respawn, 80.0)) };
+            var overCap = new[] { Item(false, (GearObjectives.Stat.Respawn, 80.0)), Item(false, (GearObjectives.Stat.Respawn, 40.0)) };
+            Assert.Equal(Score(atCap, GearObjectives.Stat.Respawn), Score(overCap, GearObjectives.Stat.Respawn));
+        }
+
+        [Fact]
+        public void RespawnBelowTheCap_StillScoresLinearly()
+        {
+            double half = Score(new[] { Item(false, (GearObjectives.Stat.Respawn, 40.0)) }, GearObjectives.Stat.Respawn);
+            double full = Score(new[] { Item(false, (GearObjectives.Stat.Respawn, 80.0)) }, GearObjectives.Stat.Respawn);
+            Assert.Equal(2.0, full / half, 9);
+        }
+
+        // The cap is a property of the STAT (a game rule), not of an objective, so it must not leak
+        // into stats the game does not floor.
+        [Fact]
+        public void OtherStats_AreNotCapped()
+        {
+            double small = Score(new[] { Item(false, (GearObjectives.Stat.DropChance, 500.0)) }, GearObjectives.Stat.DropChance);
+            double big = Score(new[] { Item(false, (GearObjectives.Stat.DropChance, 1500.0)) }, GearObjectives.Stat.DropChance);
+            Assert.True(big > small);
+        }
     }
 }
