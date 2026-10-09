@@ -185,5 +185,46 @@ namespace NGUAdvisor.Tests
         {
             Assert.Equal(0, TitanTables.VersionsDefeated(humanVersion));
         }
+
+        [Fact]
+        public void Titan_stats_gate_rejects_unready_manual_fights_and_honors_regen_gate()
+        {
+            // Grand Corrupted Tree is T2 (index 1): first manual kill requires 5K attack / 4K defense.
+            var gct = TitanTables.Guide[1][0];
+            Assert.False(TitanTables.MeetsStatsRequirement(1200, 1220, 0, gct[0], gct[1], 0));
+            Assert.True(TitanTables.MeetsStatsRequirement(gct[0], gct[1], 0, gct[0], gct[1], 0));
+
+            // T4's autokill stage also requires the game's HP-regen gate.
+            var t4Ak = TitanTables.Ak[3][0];
+            Assert.False(TitanTables.MeetsStatsRequirement(t4Ak[0], t4Ak[1], t4Ak[2] - 1,
+                t4Ak[0], t4Ak[1], t4Ak[2]));
+            Assert.True(TitanTables.MeetsStatsRequirement(t4Ak[0], t4Ak[1], t4Ak[2],
+                t4Ak[0], t4Ak[1], t4Ak[2]));
+        }
+
+        [Fact]
+        public void Manual_fight_gate_uses_manual_stats_not_the_idle_or_ak_rows()
+        {
+            // GRB after its first kill: 1.5K/1.5K clears manual (1350/1350) but neither idle
+            // (2300/2100) nor AK (3000/2500) — it must stay fightable.
+            Assert.True(TitanTables.ManualFightReady(0, 1, 1500, 1500));
+            Assert.False(TitanTables.ManualFightReady(0, 1, 1349, 1500));
+            Assert.False(TitanTables.ManualFightReady(0, 1, 1500, 1349));
+            // GCT needs 5K/4K, and an unknown titan/version is never ready.
+            Assert.False(TitanTables.ManualFightReady(1, 1, 1500, 1500));
+            Assert.False(TitanTables.ManualFightReady(0, 2, 1e30, 1e30));
+            Assert.False(TitanTables.ManualFightReady(99, 1, 1e30, 1e30));
+        }
+
+        // No row is "unknown", not "unready": the caller keeps Tippi/Traitor queued on exactly this.
+        [Fact]
+        public void Manual_row_is_null_only_where_the_tables_hold_nothing()
+        {
+            Assert.Same(TitanTables.Guide[1][0], TitanTables.ManualRow(1, 1));
+            Assert.Same(TitanTables.Guide[5][3], TitanTables.ManualRow(5, 4));
+            Assert.Null(TitanTables.ManualRow(12, 1));
+            Assert.Null(TitanTables.ManualRow(13, 1));
+            Assert.Null(TitanTables.ManualRow(0, 2));
+        }
     }
 }

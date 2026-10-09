@@ -101,6 +101,36 @@ namespace NGUAdvisor.Managers
         public static bool ChaseReady(bool wasChasing, double worstRatio)
             => wasChasing ? worstRatio >= ChaseAbandonRatio : worstRatio >= ChaseCommitRatio;
 
+        // ---- manual-fight readiness ---------------------------------------------------------------
+        //
+        // One shared gate for queueing a manual fight and displaying its readiness. Regen is only
+        // required when the row supplies a positive regen threshold.
+        public static bool MeetsStatsRequirement(double attack, double defense, double regen,
+            double reqAttack, double reqDefense, double reqRegen)
+            => attack >= reqAttack && defense >= reqDefense && (reqRegen <= 0 || regen >= reqRegen);
+
+        // The row a manual fight is judged against: the guide's manual columns, falling back to the AK
+        // attack/defense where the guide has none. Null = no row at all (Tippi/Traitor at 12-13, or a
+        // version the tables do not describe) — the requirement is unknown and the caller must decide
+        // what that means rather than read it as "not ready".
+        public static double[] ManualRow(int titanIndex, int version)
+            => Row(Guide, titanIndex, version) ?? Row(Ak, titanIndex, version);
+
+        // Can this titan/version be FOUGHT manually below AK? Always the guide's manual columns — never
+        // the staged ladder: that one moves to the idle and then the AK row after the first kill, and a
+        // below-AK titan by definition fails its AK row, so staging the gate dropped a titan from the
+        // queue the moment it had died once (GRB, user-reported 2026-10-09). No regen gate: only the
+        // game's autokill checks regen.
+        public static bool ManualFightReady(int titanIndex, int version, double attack, double defense)
+        {
+            double[] row = ManualRow(titanIndex, version);
+            return row != null && MeetsStatsRequirement(attack, defense, 0, row[0], row[1], 0);
+        }
+
+        private static double[] Row(double[][][] table, int titanIndex, int version)
+            => titanIndex >= 0 && titanIndex < table.Length && version >= 1 && version <= table[titanIndex].Length
+                ? table[titanIndex][version - 1] : null;
+
         // Titan abbreviations (0-based index), relocated from the retired WinForms TitansPanel — consumed by
         // AtHourPlanner + the UiBridge titan snapshot node.
         public static readonly string[] Abbrev =

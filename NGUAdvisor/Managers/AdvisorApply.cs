@@ -610,6 +610,20 @@ namespace NGUAdvisor.Managers
         private static string _chaseKey;
         private static bool _chasing;
 
+        // Would the best projected kill set win a manual fight against this titan/version? A titan the
+        // tables hold no row for (Tippi, Traitor) cannot be judged, so it stays queued as it always was.
+        private static bool TitanAttemptReady(Character c, int titanIndex, int version)
+        {
+            if (TitanTables.ManualRow(titanIndex, version) == null) return true;
+            try
+            {
+                OptimizationAdvisor.ProjectedBestGear(out var am, out var dm);
+                return TitanTables.ManualFightReady(titanIndex, version,
+                    c.totalAdvAttack() * am, c.totalAdvDefense() * dm);
+            }
+            catch { return false; }
+        }
+
         private static void ApplyTitans()
         {
             if (!Main.Settings.ManageTitans) return;
@@ -679,7 +693,14 @@ namespace NGUAdvisor.Managers
                     if (ZoneHelpers.RiddleLocked(i)) continue;
                     bool ak = false;
                     try { ak = ZoneHelpers.AutokillAvailable(i); } catch { }
-                    if (!ak) targets[i] = true;
+                    if (ak) continue;
+                    // The objective answers for itself: the chase decision above, applied just below.
+                    // Every OTHER below-AK titan is queued only if the best projected kill set clears
+                    // its MANUAL requirement (not the staged one — see TitanTables.ManualFightReady).
+                    // Checking only the primary objective let every later, merely-unlocked titan
+                    // through regardless of stats (e.g. Grand Corrupted Tree entered the queue while
+                    // T1 was still the only reachable manual fight).
+                    targets[i] = i == primary || TitanAttemptReady(c, i, ZoneHelpers.TitanVersion(i));
                 }
                 // Not ready for the first-kill attempt: don't attend its spawns in kill gear at all.
                 // (The version parking below keeps the AK-able version spawning for gold/drops.)
@@ -698,7 +719,7 @@ namespace NGUAdvisor.Managers
                     for (int i = 0; i < targets.Length; i++)
                         if (targets[i])
                             names.Add(ZoneHelpers.ZoneList.TryGetValue(ZoneHelpers.TitanZones[i], out var n) ? n : $"Titan {i + 1}");
-                    Main.Log($"Advisor: titan targets -> {(names.Count > 0 ? string.Join(", ", names.ToArray()) : "(none — everything auto-kills)")}");
+                    Main.Log($"Advisor: titan targets -> {(names.Count > 0 ? string.Join(", ", names.ToArray()) : "(none — no fight-ready titan below auto-kill)")}");
                 }
 
                 // The advisor owns titan killing: the kill-gear swap master must be on or the
