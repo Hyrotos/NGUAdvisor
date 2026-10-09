@@ -97,6 +97,14 @@ namespace NGUAdvisor.Managers
         ///
         /// Deliberately independent of whether the objective changed; see the class remarks.
         /// </remarks>
+        // The same question for a CHAIN objective, which has no single score to ask it with: a
+        // later step takes accessories from the lead, so the chain's own set always scores its lead
+        // BELOW a set built for the lead alone, and Decide would call that older set "optimal" and
+        // never equip the chain. Set membership is the only honest test: nothing to do exactly when
+        // every item of the best set is already on.
+        public static Verdict DecideChain(bool bestSetWorn, bool locksWorn)
+            => bestSetWorn && locksWorn ? Verdict.AlreadyOptimal : Verdict.Equip;
+
         public static Verdict Decide(double wornScore, double bestScore, bool locksWorn)
         {
             if (wornScore > 0 && bestScore <= wornScore && locksWorn)

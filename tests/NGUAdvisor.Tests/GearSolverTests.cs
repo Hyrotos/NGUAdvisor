@@ -926,5 +926,171 @@ namespace NGUAdvisor.Tests
             Assert.Null(empty.Lock);
             Assert.Null(empty.Floors.Message);
         }
+
+        // ══ CHAINS ════════════════════════════════════════════════════════════════════════════════
+        // A named chain runs its steps in order, each with an accessory budget. The pool: Power on
+        // every main slot and three accessories, Respawn on two accessories, Drop Chance on three.
+        //
+        //   weapons 101=100  102=200   head 201=40   chest 301=30   legs 401=20   boots 501=25
+        //   acc  601 P60  602 P50  603 P40  604 P30 | 611 R10  612 R6 | 621 DC30  622 DC20  623 DC10
+        private const string DC = GearObjectives.Stat.DropChance;
+
+        private static Bag ChainBag(int accessorySlots)
+        {
+            var bag = new Bag()
+                .Add(101, GearLockSlot.Weapon, P, 100, T, 100).Add(102, GearLockSlot.Weapon, P, 200, T, 200)
+                .Add(201, GearLockSlot.Head, P, 40, T, 40).Add(301, GearLockSlot.Chest, P, 30, T, 30)
+                .Add(401, GearLockSlot.Legs, P, 20, T, 20).Add(501, GearLockSlot.Boots, P, 25, T, 25)
+                .Add(601, GearLockSlot.Accessory, P, 60, T, 60).Add(602, GearLockSlot.Accessory, P, 50, T, 50)
+                .Add(603, GearLockSlot.Accessory, P, 40, T, 40).Add(604, GearLockSlot.Accessory, P, 30, T, 30)
+                .Add(611, GearLockSlot.Accessory, R, 10).Add(612, GearLockSlot.Accessory, R, 6)
+                .Add(621, GearLockSlot.Accessory, DC, 30).Add(622, GearLockSlot.Accessory, DC, 20)
+                .Add(623, GearLockSlot.Accessory, DC, 10);
+            bag.AccessorySlots = accessorySlots;
+            return bag;
+        }
+
+        private static GearChain.ChainObjective Chain(string name) => GearChain.FindPreset(name);
+        private static GearObjectives.Objective Obj(string name) => GearChain.FindObjective(name);
+
+        // The reason chains exist: one objective fills every accessory slot with the same stat.
+        [Fact]
+        public void A_plain_objective_fills_every_accessory_with_its_own_stat_and_a_chain_does_not()
+        {
+            var bag = ChainBag(5);
+            var plain = GearSolver.Solve(bag.Inputs, Obj("Adventure"));
+            Assert.Equal(new[] { 601, 602, 603, 604 }, plain.Accessories.OrderBy(x => x));
+
+            // Adventure(3) > Respawn(1) > Adventure(all): three power, the best respawn, then the
+            // fourth power accessory in the seat that is left.
+            var chained = GearSolver.Solve(bag.Inputs, Chain("Adventure + Respawn"));
+            Assert.Equal(new[] { 601, 602, 603, 611, 604 }, chained.Accessories);
+            Assert.Equal(Set(plain).Split('[')[0], Set(chained).Split('[')[0]);   // same main slots
+        }
+
+        [Fact]
+        public void A_step_never_takes_more_accessory_seats_than_are_left()
+        {
+            // Two seats: Adventure(3) takes both, Respawn(1) and the tail get nothing.
+            var two = GearSolver.Solve(ChainBag(2).Inputs, Chain("Adventure + Respawn"));
+            Assert.Equal(new[] { 601, 602 }, two.Accessories);
+
+            var none = GearSolver.Solve(ChainBag(0).Inputs, Chain("Adventure + Respawn"));
+            Assert.Empty(none.Accessories);
+            Assert.Equal(102, none.MainWeapon);
+        }
+
+        // Budget 0 on the lead is how "main slots only" is spelled: it owns the armour and weapons
+        // and leaves every accessory to the loot stat.
+        [Fact]
+        public void A_farm_chain_gives_the_main_slots_to_the_lead_and_the_accessories_to_drop_chance()
+        {
+            var bag = ChainBag(3);
+            var r = GearSolver.Solve(bag.Inputs, Chain("Drop Chance + Adventure"));
+            Assert.Equal("102/101 201 301 401 501 [621,622,623]", Set(r));
+
+            // A plain Drop Chance objective scores no main-slot item, so it leaves them all empty.
+            var plain = GearSolver.Solve(bag.Inputs, Obj("Drop Chance"));
+            Assert.Equal("0/0 0 0 0 0 [621,622,623]", Set(plain));
+        }
+
+        // Respawn rates every helmet the same as no helmet. Leading with it must not freeze the main
+        // slots empty: the first step WITH an opinion takes them.
+        [Fact]
+        public void The_main_slots_go_to_the_first_step_that_scores_them()
+        {
+            var chain = new GearChain.ChainObjective("t", new[]
+            {
+                new GearPriority { Objective = Obj("Respawn"), MaxAccessorySlots = 1 },
+                new GearPriority { Objective = Obj("Adventure") },
+            });
+            var r = GearSolver.Solve(ChainBag(3).Inputs, chain);
+            Assert.Equal("102/101 201 301 401 501 [611,601,602]", Set(r));
+        }
+
+        // A main slot no step scores is still handed to the equipper, by raw Power, because a slot
+        // the solver leaves at 0 keeps whatever happened to be worn in it.
+        [Fact]
+        public void A_chain_fills_a_main_slot_no_step_scores_by_raw_power()
+        {
+            var bag = ChainBag(2).Add(502, GearLockSlot.Boots, R, 1);   // boots: 501 has Power, 502 does not
+            var chain = new GearChain.ChainObjective("t", new[]
+            {
+                new GearPriority { Objective = Obj("Respawn"), MaxAccessorySlots = 2 },
+                new GearPriority { Objective = Obj("Drop Chance") },
+            });
+            var r = GearSolver.Solve(bag.Inputs, chain);
+            Assert.Equal(502, r.Boots);                       // Respawn owns the main slots it scores...
+            Assert.Equal("102/101 201 301 401", Set(r).Split(' ')[0] + " " + r.Head + " " + r.Chest + " " + r.Legs);
+            Assert.Equal(new[] { 611, 612 }, r.Accessories);  // ...and both accessory seats
+        }
+
+        [Fact]
+        public void The_power_weapon_pin_holds_the_main_hand_against_the_lead_objective()
+        {
+            // 103 is the best NGU weapon and carries no Power; the farm chain must not wield it.
+            var bag = ChainBag(3).Add(103, GearLockSlot.Weapon, GearObjectives.Stat.NGUSpeed, 500);
+            var r = GearSolver.Solve(bag.Inputs, Chain("Drop Chance + NGUs"));
+            Assert.Equal(102, r.MainWeapon);
+            Assert.Equal(103, r.OffWeapon);
+
+            // A locked weapon outranks the preset's pin and keeps the main hand.
+            var locked = GearSolver.Solve(bag.Inputs, Chain("Drop Chance + NGUs"), false, GearLockSet.Of(new[] { 101 }));
+            Assert.Equal(101, locked.MainWeapon);
+            Assert.Equal(102, locked.OffWeapon);
+        }
+
+        // Locked accessories are held in front of every step's budget, not charged to one.
+        [Fact]
+        public void A_locked_accessory_is_kept_and_the_steps_budget_the_seats_that_remain()
+        {
+            var r = GearSolver.Solve(ChainBag(5).Inputs, Chain("Adventure + Respawn"), false, GearLockSet.Of(new[] { 623 }));
+            Assert.Equal(new[] { 623, 601, 602, 603, 611 }, r.Accessories);
+        }
+
+        [Fact]
+        public void A_chain_reports_one_score_per_step_and_its_lead_as_the_score()
+        {
+            // Four seats: the respawn accessory costs the lead its fourth power accessory.
+            var bag = ChainBag(4);
+            var chain = Chain("Adventure + Respawn");
+            var r = GearSolver.Solve(bag.Inputs, chain);
+            Assert.Equal(new[] { 601, 602, 603, 611 }, r.Accessories);
+            Assert.Equal(3, r.StepScores.Length);
+            Assert.Equal(bag.ScoreOf(Obj("Adventure"), r), r.Score, 12);
+            Assert.Equal(r.Score, r.StepScores[0], 12);
+            Assert.Equal(bag.ScoreOf(Obj("Respawn"), r), r.StepScores[1], 12);
+            Assert.Equal(0.10, r.StepScores[1], 12);
+
+            // The lead scores LOWER than under the plain objective -- which is exactly why a chain
+            // cannot be compared on Score.
+            var plain = GearSolver.Solve(bag.Inputs, Obj("Adventure"));
+            Assert.True(r.Score < plain.Score);
+            Assert.Equal(plain.Score, Assert.Single(plain.StepScores), 12);
+        }
+
+        // The respawn pin re-runs the whole chain around each candidate.
+        [Fact]
+        public void The_respawn_pin_composes_with_a_chain()
+        {
+            var r = GearSolver.Solve(ChainBag(3).Inputs, Chain("Drop Chance + Adventure"), true);
+            Assert.Equal(new[] { 611, 621, 622 }, r.Accessories);
+            Assert.Equal("102/101 201 301 401 501", Set(r).Split(' ')[0] + " " + r.Head + " " + r.Chest + " " + r.Legs + " " + r.Boots);
+        }
+
+        // A floor the chain's own set misses is met first, then each step re-searches its seats.
+        [Fact]
+        public void A_chain_under_a_floor_stays_feasible()
+        {
+            var bag = ChainBag(3);
+            // Main slots give 200 + 100*0.5 + 40 + 30 + 20 + 25 = 365 Power; the floor needs one
+            // power accessory on top, which the farm chain would not pick by itself.
+            var floors = Floor(P, 400);
+            var r = GearSolver.Solve(bag.Inputs, Chain("Drop Chance + Adventure"), false, null, floors);
+            Assert.True(r.Floors.Feasible, r.Floors.Message);
+            Assert.True(bag.RawStat(P, r) >= 400);
+            Assert.Contains(621, r.Accessories);
+            Assert.False(double.IsInfinity(r.Score));
+        }
     }
 }

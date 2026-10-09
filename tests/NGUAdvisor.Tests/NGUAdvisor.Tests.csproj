@@ -107,6 +107,7 @@
          the Assembly-CSharp `part` enum, cube/base/offhand/slot-counts/lookup passed in) is what makes
          "an infeasible floor set still returns a finite score" a test that can exist. -->
     <Compile Include="..\..\NGUAdvisor\Managers\GearSolver.cs" Link="Linked\GearSolver.cs" />
+    <Compile Include="..\..\NGUAdvisor\Managers\GearChain.cs" Link="Linked\GearChain.cs" />
     <!-- "I must survive this fight" -> a gear-stat number. The arithmetic is separated from the live
          read precisely so it can be linked here: a wrong multiplier is a SILENT wrong answer — no
          throw, nothing odd-looking, just a floor in the wrong units marking an unsurvivable set

@@ -1417,6 +1417,18 @@ namespace NGUAdvisor.Managers
         // very items the user pinned, and the locks would never be equipped at all.
         //
         // True when there is no lock, which is the whole of the old behaviour.
+        // Is every item of this set already on? The chain paths' "nothing to do" test
+        // (GearRefreshPolicy.DecideChain). Unreadable gear reads as "not worn", so the equip proceeds.
+        private static bool SetIsWorn(int[] ids)
+        {
+            try
+            {
+                var worn = new HashSet<int>(LoadoutManager.CurrentGearIds());
+                return ids.Length > 0 && ids.All(worn.Contains);
+            }
+            catch { return false; }
+        }
+
         private static bool LocksAreWorn(GearLockPlan plan)
         {
             if (plan == null || plan.Applied == 0) return true;
@@ -1544,8 +1556,11 @@ namespace NGUAdvisor.Managers
                 // On a CHANGED objective this same test means "you are already wearing the best set for
                 // it", because the optimiser searched the whole inventory — so declining is right, and
                 // re-equipping would be a pure cost: ChangeGear zeroes energy/magic/R3 allocation.
-                if (GearRefreshPolicy.Decide(cur, best.Score, LocksAreWorn(best.Lock))
-                    == GearRefreshPolicy.Verdict.AlreadyOptimal)
+                var chainObj = obj as GearChain.ChainObjective;
+                var verdict = chainObj != null
+                    ? GearRefreshPolicy.DecideChain(SetIsWorn(ids), LocksAreWorn(best.Lock))
+                    : GearRefreshPolicy.Decide(cur, best.Score, LocksAreWorn(best.Lock));
+                if (verdict == GearRefreshPolicy.Verdict.AlreadyOptimal)
                 {
                     // A VERIFIED already-optimal IS a resolution (ApplyGearRefresh commits on the same
                     // footing), so it commits — but AFTER the decision, never before it.
@@ -1557,7 +1572,9 @@ namespace NGUAdvisor.Managers
                     return $"Already optimal for '{obj.Name}' — your equipped set is the best available.";
                 }
 
-                double gain = cur > 0 ? (best.Score / cur - 1) * 100 : 0;
+                // A chain has no single gain to quote: the lead step's score usually FALLS when a later
+                // step takes its accessories.
+                double gain = chainObj == null && cur > 0 ? (best.Score / cur - 1) * 100 : 0;
                 LoadoutManager.ChangeGear(ids);
                 Main.InventoryController.assignCurrentEquipToLoadout(0);
                 // A slot the OPERATOR owns, saved over by four separate advisor gear paths, with nothing
@@ -1569,7 +1586,9 @@ namespace NGUAdvisor.Managers
                     "The contents that were in the slot before are not kept anywhere",
                     "Re-save the slot yourself if you were using it");
                 _gearAsserted = true; _lastGearObjective = objName; _lastGearLocks = lockKey;
-                Main.Log(objectiveChanged
+                Main.Log(chainObj != null
+                    ? $"Advisor: gear {(objectiveChanged ? "switched to" : "re-optimized on request for")} '{obj.Name}' [{GearChain.Describe(chainObj.Priorities)}]"
+                    : objectiveChanged
                     ? $"Advisor: gear switched to '{obj.Name}' on request (objective change, {gain:+0.#;-0.#;+0.0}%)"
                     : $"Advisor: gear re-optimized on request for '{obj.Name}' (+{gain:0.#}%)");
                 return gain > 0.05
@@ -1666,7 +1685,33 @@ namespace NGUAdvisor.Managers
             var best = GearOptimizer.Optimize(obj, resolved.ForceRespawn, GearLockSet.Of(resolved.Locks));
             if (best == null) return;
             GearOptimizer.ReportLock(best);
-            if (_gearAsserted)
+            var chainObj = obj as GearChain.ChainObjective;
+            string chainGain = null;
+            if (chainObj != null)
+            {
+                // A CHAIN IS JUDGED STEP BY STEP, NOT ON best.Score. The same 5% bar, applied to the
+                // first step that leaves it (GearChain.DecidingStep), and "already wearing it" is set
+                // membership rather than a score -- see GearRefreshPolicy.DecideChain for why the lead
+                // score cannot be trusted with either question.
+                if (_gearAsserted)
+                {
+                    int k = GearOptimizer.ChainDecidingStep(chainObj, best, 1.05, out bool improves,
+                                                            out double wornStep, out double bestStep);
+                    if (!objectiveChanged && !improves) return;
+                    var chainIds = best.AllIds().Where(x => x > 0).Distinct().ToArray();
+                    if (GearRefreshPolicy.DecideChain(SetIsWorn(chainIds), LocksAreWorn(best.Lock))
+                        == GearRefreshPolicy.Verdict.AlreadyOptimal)
+                    {
+                        _lastGearObjective = objName;   // verified: the chain's best set IS what is worn
+                        _lastGearLocks = lockKey;
+                        return;
+                    }
+                    if (improves)
+                        chainGain = (wornStep > 0 ? $"+{(bestStep / wornStep - 1) * 100:0.#}% " : "new ")
+                                  + chainObj.Priorities[k].Objective.Name;
+                }
+            }
+            else if (_gearAsserted)
             {
                 if (!objectiveChanged && (cur <= 0 || best.Score < cur * 1.05)) return;
                 // Same trap as ForceGearReoptimize's "already optimal": a lock costs score, so without
@@ -1700,7 +1745,9 @@ namespace NGUAdvisor.Managers
                 ? $"Advisor: gear asserted for '{obj.Name}' (startup/reload — known-good loadout re-equipped)"
                 : objectiveChanged
                     ? $"Advisor: gear switched to '{obj.Name}' loadout (objective change)"
-                    : $"Advisor: re-optimized gear for '{obj.Name}' (+{(best.Score / cur - 1) * 100:0.#}% from new drops)");
+                    : chainObj != null
+                        ? $"Advisor: re-optimized gear for '{obj.Name}' ({chainGain ?? "set changed"} from new drops)"
+                        : $"Advisor: re-optimized gear for '{obj.Name}' (+{(best.Score / cur - 1) * 100:0.#}% from new drops)");
         }
 
         private static void ApplyWandoosOs(Character c)

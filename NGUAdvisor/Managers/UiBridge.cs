@@ -1695,6 +1695,8 @@ namespace NGUAdvisor.Managers
                     {
                         var arr = new JSONArray();
                         foreach (var o in objs) arr.Add(o.Name);
+                        // Named chains are picked exactly like an objective, so they share the list.
+                        foreach (var p in GearChain.Presets) arr.Add(p.Name);
                         _gearObjectivesCache = arr;
                     }
                 }

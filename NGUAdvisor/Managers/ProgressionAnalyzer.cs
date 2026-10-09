@@ -185,7 +185,19 @@ namespace NGUAdvisor.Managers
                 // Free: this Optimize already ran, and its picks were being thrown away.
                 BestGearIds = best.AllIds().Where(x => x > 0).Distinct().ToArray();
                 BestGearFor = obj.Name;
-                if (cur > 0 && opt > cur)
+                var chainObj = obj as GearChain.ChainObjective;
+                if (chainObj != null)
+                {
+                    // Same 8% threshold, on the chain step that decides (the lead score alone would
+                    // read a chain's own set as a downgrade).
+                    int k = GearOptimizer.ChainDecidingStep(chainObj, best, 1.08, out bool improves,
+                                                            out double wornStep, out double bestStep);
+                    _focus = improves
+                        ? "Re-optimize gear: " + (wornStep > 0 ? $"+{(bestStep / wornStep - 1) * 100:0}% " : "")
+                          + $"{chainObj.Priorities[k].Objective.Name} ({objName})"
+                        : $"Gear near-optimal ({objName})";
+                }
+                else if (cur > 0 && opt > cur)
                 {
                     double pct = (opt / cur - 1.0) * 100.0;
                     _focus = pct >= 8 ? $"Re-optimize gear: +{pct:0}% {objName}" : $"Gear near-optimal ({objName})";

@@ -48,9 +48,24 @@ namespace NGUAdvisor.Managers
             => Optimize(obj, forceTopRespawn, locks).AllIds().Where(x => x > 0).Distinct().ToArray();
 
         // Optimize for an objective by name (as stored in profiles/settings); null if unknown.
+        // A plain objective first, then a named chain (GearChain.Presets) -- a chain is an Objective,
+        // so every caller that resolves a name here can be handed one.
         public static GearObjectives.Objective FindObjective(string name)
-            => GearObjectives.Objectives.FirstOrDefault(o =>
-                string.Equals(o.Name, name, StringComparison.OrdinalIgnoreCase));
+            => GearChain.FindObjective(name) ?? GearChain.FindPreset(name);
+
+        // Worn against best under a CHAIN, step by step (GearChain.DecidingStep): the step that
+        // decides at `bar`, or -1 when every step is inside it. Result.Score cannot answer this -- it
+        // is the lead step's, and a later step takes accessories from the lead, so a set built for
+        // the lead alone always out-scores the chain's own set on it.
+        public static int ChainDecidingStep(GearChain.ChainObjective chain, GearSolver.Result best, double bar,
+                                            out bool improves, out double worn, out double bestStep)
+        {
+            var wornScores = chain.Priorities.Select(p => CurrentScore(p.Objective)).ToArray();
+            int k = GearChain.DecidingStep(wornScores, best.StepScores, bar, out improves);
+            worn = k >= 0 ? wornScores[k] : 0;
+            bestStep = k >= 0 ? best.StepScores[k] : 0;
+            return k;
+        }
 
         // Resolve the gear a mode should equip: if objectiveName is set (and valid), optimize live for it
         // (route C3 3.2) so the mode's gear stays optimal; otherwise fall back to the static loadout IDs.

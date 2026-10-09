@@ -45,6 +45,10 @@ namespace NGUAdvisor.Managers
             // could not. Null when the solve carried no locks. Same argument as Floors: a lock the
             // solver dropped in silence is a set the user never asked for.
             public GearLockPlan Lock;
+            // Each chain step's objective scored over the WHOLE final set, in step order; one entry
+            // for a plain objective. Score alone cannot compare two sets under a chain: it is the lead
+            // step's, and a later step takes accessories from the lead (GearChain.DecidingStep).
+            public double[] StepScores = new double[0];
             public IEnumerable<int> AllIds()
             {
                 if (MainWeapon != 0) yield return MainWeapon;
@@ -95,9 +99,18 @@ namespace NGUAdvisor.Managers
         // whatever is left free, so a locked set that cannot reach a floor comes back INFEASIBLE with
         // the shortfall named and the number of held slots said out loud — the same reportable state
         // an unreachable floor already produced, plus the reason it may be unreachable.
-        public static Result Solve(Inputs inp, GearObjectives.Objective obj, bool forceTopRespawn = false,
+        //
+        // A GearChain.ChainObjective runs its steps in order; anything else is a one-step chain and
+        // takes exactly the path it always took.
+        public static Result Solve(Inputs inp, GearObjectives.Objective target, bool forceTopRespawn = false,
                                    GearLockSet locks = null, GearFloorSet floors = null)
         {
+            var steps = GearChain.StepsOf(target);
+            if (steps.Count == 0) return new Result();
+            bool chainMode = target is GearChain.ChainObjective;
+            // The step being optimized. ScoreOf reads it, so the search below never has to know
+            // whether it is running a chain.
+            var obj = steps[0].Objective;
             var idToItem = inp.IdToItem ?? new Dictionary<int, GearScorer.Item>();
             var pools = inp.Pools ?? new Dictionary<GearLockSlot, List<KeyValuePair<int, GearScorer.Item>>>();
             var cube = inp.Cube;
@@ -117,6 +130,21 @@ namespace NGUAdvisor.Managers
             var accPool = Pool(GearLockSlot.Accessory);
 
             var r = new Result();
+
+            // The farm sets' weapon pin (GearPriority.PinTopPowerWeapon): the single highest-Power
+            // weapon in the pool, held in the main hand for the whole solve. Resolved ONCE -- it does
+            // not depend on the chain's progress, and the respawn pass re-runs the chain per candidate.
+            int powerWeaponPin = 0;
+            if (steps.Any(p => p.PinTopPowerWeapon))
+            {
+                double bestPower = 0;
+                foreach (var w in weapons)
+                    if (w.Value.Stats.TryGetValue(GearObjectives.Stat.Power, out double pw) && pw > bestPower)
+                    {
+                        bestPower = pw;
+                        powerWeaponPin = w.Key;
+                    }
+            }
 
             // ── GEAR LOCK ──────────────────────────────────────────────────────────────────────────
             // Resolve the user's named items against THIS inventory and THESE slot counts. Re-resolved
@@ -159,7 +187,7 @@ namespace NGUAdvisor.Managers
             {
                 holdWeapon = holdOff = holdHead = holdChest = holdLegs = holdBoots = false;
                 holdAccessories = 0;
-                if (lockPlan == null) return;
+                if (lockPlan == null) { SeedPowerWeapon(); return; }
                 if (lockPlan.Weapons.Count > 0)
                 {
                     int a = lockPlan.Weapons[0];
@@ -173,6 +201,16 @@ namespace NGUAdvisor.Managers
                 if (lockPlan.Legs != 0) { r.Legs = lockPlan.Legs; holdLegs = true; }
                 if (lockPlan.Boots != 0) { r.Boots = lockPlan.Boots; holdBoots = true; }
                 foreach (var a in lockPlan.Accessories) { r.Accessories.Add(a); holdAccessories++; }
+                SeedPowerWeapon();
+            }
+
+            // After the locks, so a locked weapon keeps the main hand: an explicit lock outranks a
+            // preset's pin. A pin with no free seat is simply not seated.
+            void SeedPowerWeapon()
+            {
+                if (powerWeaponPin == 0 || r.MainWeapon == powerWeaponPin || r.OffWeapon == powerWeaponPin) return;
+                if (!holdWeapon) { r.MainWeapon = powerWeaponPin; holdWeapon = true; }
+                else if (twoWeapons && !holdOff) { r.OffWeapon = powerWeaponPin; holdOff = true; }
             }
 
             List<GearScorer.Item> WornList()
@@ -262,20 +300,24 @@ namespace NGUAdvisor.Managers
                 }
             }
 
+            // The accessory seats the step being optimized owns: [accFirst, accCap). For a plain
+            // objective that is every seat past the held ones, which is what this always searched.
+            int accFirst = 0, accCap = 0;
+
             void AccessoryOptimize()
             {
-                if (accSlots <= 0 || accPool.Count == 0) return;
+                if (accCap <= 0 || accPool.Count == 0) return;
                 // Held accessories — locked items and/or a pinned respawn item — occupy the FRONT of
                 // the list and are never swapped out. The count is what changed when Gear Lock landed:
                 // it used to be 0-or-1, and a lock can hold every accessory slot there is. The greedy
                 // fill below stops on its own in that case (Count is already accSlots), and the swap
                 // loop starts past the end, so a fully-locked accessory set is a no-op rather than an
                 // error — which is the degenerate case the feature has to survive.
-                int fixedCount = holdAccessories;
+                int fixedCount = accFirst;
                 // Greedy fill. Each accessory id is used at most once BY DESIGN: NGU only lets one copy of a
                 // given accessory be equipped at a time, even if you own duplicates. So this uniqueness guard
                 // (and the id-dedup in BuildPools) enforces a real game rule — it is NOT an optimizer limitation.
-                while (r.Accessories.Count < accSlots)
+                while (r.Accessories.Count < accCap)
                 {
                     int best = 0; double bs = ScoreOf();
                     foreach (var c in accPool)
@@ -291,7 +333,7 @@ namespace NGUAdvisor.Managers
                 for (int iter = 0; iter < 50; iter++)
                 {
                     bool improved = false;
-                    for (int i = fixedCount; i < r.Accessories.Count; i++)
+                    for (int i = fixedCount; i < r.Accessories.Count && i < accCap; i++)
                     {
                         int cur = r.Accessories[i]; int best = cur; double bs = ScoreOf();
                         foreach (var c in accPool)
@@ -351,18 +393,91 @@ namespace NGUAdvisor.Managers
                 return sc;
             }
 
+            // Does this objective score anything a FREE main seat could wear? A step that does not
+            // (Respawn, Drop Chance) rates every helmet the same as no helmet, so letting it own the
+            // main slots means leaving them empty -- and the equipper keeps whatever was worn in a
+            // slot it is not handed.
+            bool HasMainOpinion(GearObjectives.Objective o)
+            {
+                bool Scores(List<KeyValuePair<int, GearScorer.Item>> pool)
+                {
+                    foreach (var c in pool)
+                        foreach (var stat in o.Stats)
+                            if (c.Value.Stats.TryGetValue(stat, out double v) && v > 0) return true;
+                    return false;
+                }
+                return ((!holdWeapon || (twoWeapons && !holdOff)) && Scores(weapons))
+                    || (!holdHead && Scores(heads)) || (!holdChest && Scores(chests))
+                    || (!holdLegs && Scores(legs)) || (!holdBoots && Scores(boots));
+            }
+
+            // Highest raw Power in a pool: which item to wear when no step cares. Starts below zero
+            // so a pool of Power-less items still yields one -- something beats nothing.
+            int HighestPower(IEnumerable<KeyValuePair<int, GearScorer.Item>> pool)
+            {
+                int pick = 0; double bestPower = -1;
+                foreach (var c in pool)
+                {
+                    c.Value.Stats.TryGetValue(GearObjectives.Stat.Power, out double pw);
+                    if (pw > bestPower) { bestPower = pw; pick = c.Key; }
+                }
+                return pick;
+            }
+
+            // Chains only. An owner keeps just the main slots its stats fill, and a slot left at 0 is
+            // not handed to the equipper at all. Cannot lower any step's score or break a floor: stats
+            // are non-negative, and the slot is only empty because nothing strictly improved it.
+            void FillEmptyMainSlotsByPower()
+            {
+                if (!holdWeapon && r.MainWeapon == 0)
+                    r.MainWeapon = HighestPower(weapons.Where(w => w.Key != r.OffWeapon));
+                if (twoWeapons && !holdOff && r.OffWeapon == 0)
+                    r.OffWeapon = HighestPower(weapons.Where(w => w.Key != r.MainWeapon));
+                if (!holdHead && r.Head == 0) r.Head = HighestPower(heads);
+                if (!holdChest && r.Chest == 0) r.Chest = HighestPower(chests);
+                if (!holdLegs && r.Legs == 0) r.Legs = HighestPower(legs);
+                if (!holdBoots && r.Boots == 0) r.Boots = HighestPower(boots);
+            }
+
+            // One pass over the steps. THE MAIN SLOTS GO TO THE FIRST STEP WITH AN OPINION ABOUT THEM,
+            // not to step 0 unconditionally; every step after the owner is accessory-only, which is
+            // exactly "freeze the main slots once they are claimed". Each step's accessory budget is
+            // taken from the seats still free when it runs, so a step that fills fewer than it asked
+            // for hands the rest on.
+            //
+            // Safe to re-enter on a filled set (the floor phases do): a step then re-searches the
+            // seats it owns by position instead of filling them.
             double RunOptimize()
             {
-                // alternate until stable (slots interact only through the product objective)
-                double prev = double.NegativeInfinity;
-                for (int round = 0; round < 5; round++)
+                int frozen = holdAccessories;
+                bool mainOwned = false;
+                foreach (var step in steps)
                 {
-                    MainAscent();
-                    AccessoryOptimize();
-                    double cur = ScoreOf();
-                    if (cur <= prev * (1 + 1e-12)) break;
-                    prev = cur;
+                    obj = step.Objective;
+                    accFirst = frozen;
+                    accCap = frozen + Math.Min(Math.Max(0, step.MaxAccessorySlots), Math.Max(0, accSlots - frozen));
+                    if (!mainOwned)
+                    {
+                        // alternate until stable (slots interact only through the product objective)
+                        double prev = double.NegativeInfinity;
+                        for (int round = 0; round < 5; round++)
+                        {
+                            MainAscent();
+                            AccessoryOptimize();
+                            double cur = ScoreOf();
+                            if (cur <= prev * (1 + 1e-12)) break;
+                            prev = cur;
+                        }
+                        // While walking toward a floor every step scores the same shortfall, so the
+                        // first one has already searched the main slots for all of them.
+                        mainOwned = !chainMode || (floorNames.Length > 0 && phase == 0) || HasMainOpinion(obj);
+                    }
+                    else AccessoryOptimize();
+                    frozen = Math.Min(r.Accessories.Count, accCap);
                 }
+                obj = steps[0].Objective;
+                if (chainMode) FillEmptyMainSlotsByPower();
+                // A chain has no single score, so this is the lead step's.
                 return ScoreOf();
             }
 
@@ -441,6 +556,11 @@ namespace NGUAdvisor.Managers
                 // never leave a half-built result standing in for the merit set.
                 bool SeatFree(GearLockSlot p)
                 {
+                    // The power-weapon pin takes a weapon seat the lock plan knows nothing about.
+                    int lockedWeapons = lockPlan == null ? 0 : lockPlan.Weapons.Count;
+                    bool pinSeated = powerWeaponPin != 0 && lockedWeapons < cap.Weapons
+                                     && (lockPlan == null || !lockPlan.Holds(powerWeaponPin));
+                    if (p == GearLockSlot.Weapon) return lockedWeapons + (pinSeated ? 1 : 0) < cap.Weapons;
                     if (lockPlan == null) return p != GearLockSlot.Accessory || accSlots > 0;
                     switch (p)
                     {
@@ -470,6 +590,7 @@ namespace NGUAdvisor.Managers
                         // A candidate the lock already holds is not a candidate: it is worn, so
                         // HasRespawn() would have been true, and pinning it again is a duplicate.
                         if (lockPlan != null && lockPlan.Holds(it.Key)) continue;
+                        if (it.Key == powerWeaponPin) continue;
                         // Its seat is already held by the lock. Overwriting a locked item is the one
                         // thing a lock forbids, so this candidate simply is not available.
                         if (!SeatFree(p)) continue;
@@ -504,6 +625,8 @@ namespace NGUAdvisor.Managers
                 else r = merit;
             }
 
+            var finalSet = WornList();
+            r.StepScores = steps.Select(st => GearScorer.ScoreRaw(finalSet, st.Objective.Stats, st.Objective.Exponents, offhand)).ToArray();
             return r;
         }
     }
