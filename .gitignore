@@ -362,3 +362,6 @@ dist_*.zip
 
 # release packager output
 /dist/
+
+# local agent tooling, not part of this repo
+/.github/
