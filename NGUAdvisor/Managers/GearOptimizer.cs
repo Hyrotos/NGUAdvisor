@@ -48,10 +48,9 @@ namespace NGUAdvisor.Managers
             => Optimize(obj, forceTopRespawn, locks).AllIds().Where(x => x > 0).Distinct().ToArray();
 
         // Optimize for an objective by name (as stored in profiles/settings); null if unknown.
-        // A plain objective first, then a named chain (GearChain.Presets) -- a chain is an Objective,
-        // so every caller that resolves a name here can be handed one.
-        public static GearObjectives.Objective FindObjective(string name)
-            => GearChain.FindObjective(name) ?? GearChain.FindPreset(name);
+        // A plain objective first, then a named chain (GearChain.Presets), then a spelled one -- a
+        // chain is an Objective, so every caller that resolves a name here can be handed one.
+        public static GearObjectives.Objective FindObjective(string name) => GearChain.Find(name);
 
         // Worn against best under a CHAIN, step by step (GearChain.DecidingStep): the step that
         // decides at `bar`, or -1 when every step is inside it. Result.Score cannot answer this -- it

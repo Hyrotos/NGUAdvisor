@@ -548,6 +548,7 @@
   .tl-editor .tle-title { color: var(--faint); }
   .tle-row { display: grid; grid-template-columns: 90px minmax(0,1fr); gap: var(--sp-2); align-items: center; }
   .tle-row > label { font-size: var(--fs-3); color: var(--muted); }
+  .tle-row[hidden] { display: none; }   /* the grid above outranks the UA's [hidden] rule */
   .tl-editor input, .tl-editor select { font-family: var(--mono); font-size: var(--fs-4); color: var(--text); background: var(--ground-2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
   .tl-editor input:focus-visible, .tl-editor select:focus-visible { outline: var(--focus-ring); outline-offset: 1px; border-color: var(--accent); }
   .tl-editor .tin { width: 48px; padding: 4px 5px; font-size: var(--fs-2); }
@@ -4911,10 +4912,21 @@
   // Read the gear form back into the hidden payload input, and keep the on-screen explanation of what
   // this row will now DO in step with it. That sentence is the whole point of the section: "3 items +
   // an objective" has to read as one plan, not two settings that happen to be next to each other.
+  // A CHAIN OF YOUR OWN is spelled, and the spelling is its objective name — the advisor resolves
+  // "Adventure(3) > Respawn(1) > Adventure(all)" exactly as it resolves "Adventure". So the form needs
+  // no second field in the payload: the picker's "Custom chain…" entry only swaps WHERE the name is
+  // typed. A name with a "(" in it is a spelled chain; no plain objective or named chain has one.
+  var PE_CHAIN = "__chain__";
+  function peIsChain(name){ return String(name||"").indexOf("(")>=0; }
   function peSyncGear(ed){
     var hidden=ed.querySelector('[data-k="payload"]'); if(!hidden) return;
     var objEl=ed.querySelector('[data-k="gearobj"]'), respEl=ed.querySelector('[data-k="gearresp"]');
-    var objective = objEl ? String(objEl.value||"").trim() : "";
+    var chainEl=ed.querySelector('[data-k="gearchain"]'), chainRow=ed.querySelector(".peg-chainrow");
+    var custom = !!(objEl && objEl.value===PE_CHAIN);
+    if(chainRow) chainRow.hidden = !custom;
+    // ";" and ":" are the payload's own separators, so they can never be part of a chain.
+    var objective = custom ? String(chainEl ? chainEl.value : "").replace(/[;:]/g,"").trim()
+                           : (objEl ? String(objEl.value||"").trim() : "");
     var respawn = !!(respEl && respEl.checked);
     var ids = BLISTS.peLocks.arr||[];
     hidden.value = peBuildGearPayload(ids, objective, respawn);
@@ -4992,12 +5004,19 @@
       // an objective the profile already carries can still be read and re-saved rather than lost.
       var objField;
       if(GEAR_OBJECTIVES && GEAR_OBJECTIVES.length){
-        var known = GEAR_OBJECTIVES.indexOf(g.objective)>=0;
+        var known = GEAR_OBJECTIVES.indexOf(g.objective)>=0, isChain = !known && peIsChain(g.objective);
         objField = '<select class="tle-sel" id="pegObj" data-k="gearobj"><option value="">None — wear the items below, unchanged</option>'+
-          (g.objective && !known ? '<option value="'+esc(g.objective)+'" selected>'+esc(g.objective)+' (not recognised)</option>' : '')+
+          (g.objective && !known && !isChain ? '<option value="'+esc(g.objective)+'" selected>'+esc(g.objective)+' (not recognised)</option>' : '')+
           GEAR_OBJECTIVES.map(function(n){
             return '<option value="'+esc(n)+'"'+(n===g.objective?' selected':'')+'>'+esc(n)+'</option>'; }).join('')+
+          '<option value="'+PE_CHAIN+'"'+(isChain?' selected':'')+'>Custom chain…</option>'+
           '</select>';
+        objField += '</div><div class="tle-row peg-chainrow"'+(isChain?'':' hidden')+'><label for="pegChain">Chain</label>'+
+          '<span class="tle-wide"><input class="tle-wide" id="pegChain" data-k="gearchain" value="'+esc(isChain?g.objective:"")+'" '+
+          'placeholder="Adventure(3) > Respawn(1) > Adventure(all)" spellcheck="false">'+
+          '<div class="tle-hint mut">Up to 5 steps, in order. Each is an objective and how many of the free accessory slots it may '+
+          'take — a number, or “all”. The first step that scores weapons and armour picks those. Add “+PowerWeapon” to a step to '+
+          'hold your hardest-hitting weapon.</div></span>';
       } else {
         objField = '<input class="tle-wide" id="pegObj" data-k="gearobj" value="'+esc(g.objective)+'" placeholder="objective name — e.g. Time Machine">';
       }
@@ -6514,7 +6533,7 @@
       } else if(t.id === "peCount"){
         // The digger activation count lives beside the list and serialises into the same payload.
         peSyncPayload();
-      } else if(t.matches && t.matches('[data-k="gearobj"],[data-k="gearresp"]')){
+      } else if(t.matches && t.matches('[data-k="gearobj"],[data-k="gearresp"],[data-k="gearchain"]')){
         // Gear Lock: the objective and the respawn switch serialise into the same payload as the
         // locked-item list. Deliberately NOT [data-setting] — this is breakpoint content that saves
         // with the row, not a live setting, and posting it as one would write to the wrong place.

@@ -1092,5 +1092,18 @@ namespace NGUAdvisor.Tests
             Assert.Contains(621, r.Accessories);
             Assert.False(double.IsInfinity(r.Score));
         }
+
+        // A chain of the user's own is resolved from its spelling and solved like a named one.
+        [Fact]
+        public void A_spelled_chain_solves_like_the_named_chain_it_spells()
+        {
+            var bag = ChainBag(5);
+            var named = GearSolver.Solve(bag.Inputs, Chain("Adventure + Respawn"));
+            var spelled = GearSolver.Solve(bag.Inputs, GearChain.Find("Adventure(3) > Respawn(1) > Adventure(all)"));
+            Assert.Equal(Set(named), Set(spelled));
+
+            var own = GearSolver.Solve(bag.Inputs, GearChain.Find("Respawn(2) > Drop Chance(1) > Adventure(all)"));
+            Assert.Equal("102/101 201 301 401 501 [611,612,621,601,602]", Set(own));
+        }
     }
 }

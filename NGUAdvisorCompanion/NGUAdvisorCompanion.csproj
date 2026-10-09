@@ -56,6 +56,10 @@
     <Compile Include="..\NGUAdvisor\Managers\PriorityCatalog.cs" Link="Shared\PriorityCatalog.cs" />
     <Compile Include="..\NGUAdvisor\Managers\BreakpointEditor.cs" Link="Shared\BreakpointEditor.cs" />
     <Compile Include="..\NGUAdvisor\Managers\ProfileValidator.cs" Link="Shared\ProfileValidator.cs" />
+    <!-- BreakpointEditor refuses a gear chain it cannot read, so the chain grammar and the objective
+         names it resolves against have to be on this side of the pipe too. -->
+    <Compile Include="..\NGUAdvisor\Managers\GearChain.cs" Link="Shared\GearChain.cs" />
+    <Compile Include="..\NGUAdvisor\Managers\GearObjectives.cs" Link="Shared\GearObjectives.cs" />
     <Compile Include="..\NGUAdvisor\SimpleJson.cs" Link="Shared\SimpleJson.cs" />
   </ItemGroup>
 

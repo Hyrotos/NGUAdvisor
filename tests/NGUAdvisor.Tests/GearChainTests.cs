@@ -145,5 +145,192 @@ namespace NGUAdvisor.Tests
             Assert.Equal(GearRefreshPolicy.Verdict.Equip, GearRefreshPolicy.DecideChain(true, false));
             Assert.Equal(GearRefreshPolicy.Verdict.AlreadyOptimal, GearRefreshPolicy.DecideChain(true, true));
         }
+
+        // ── SPELLED CHAINS ────────────────────────────────────────────────────────────────────────
+
+        [Fact]
+        public void Find_ResolvesAPlainObjectiveANamedChainAndASpelledOne()
+        {
+            Assert.Same(GearChain.FindObjective("Adventure"), GearChain.Find("adventure"));
+            Assert.Same(GearChain.FindPreset("Adventure + Respawn"), GearChain.Find("Adventure + Respawn"));
+            Assert.IsType<GearChain.ChainObjective>(GearChain.Find("Respawn(1) > NGUs(all)"));
+            Assert.Null(GearChain.Find("Advent"));
+            Assert.Null(GearChain.Find(""));
+            Assert.Null(GearChain.Find(null));
+        }
+
+        // Describe and Parse are the two halves of one spelling: whatever one prints, the other reads.
+        [Fact]
+        public void Parse_ReadsBackExactlyWhatDescribePrints()
+        {
+            foreach (var preset in GearChain.Presets)
+            {
+                string spelled = GearChain.Describe(preset.Priorities);
+                var parsed = GearChain.Parse(spelled);
+                Assert.NotNull(parsed);
+                Assert.Equal(spelled, parsed.Name);
+                Assert.Equal(spelled, GearChain.Describe(parsed.Priorities));
+                Assert.Equal(preset.Priorities.Select(p => p.PinTopPowerWeapon), parsed.Priorities.Select(p => p.PinTopPowerWeapon));
+                Assert.Equal(preset.Priorities.Select(p => p.MaxAccessorySlots), parsed.Priorities.Select(p => p.MaxAccessorySlots));
+            }
+        }
+
+        [Fact]
+        public void Parse_IsForgivingAboutSpacingAndCaseAndNamesTheChainCanonically()
+        {
+            var chain = GearChain.Parse("  adventure( 3 )>respawn(1) >  ADVENTURE(All)+powerweapon ");
+            Assert.NotNull(chain);
+            Assert.Equal("Adventure(3) > Respawn(1) > Adventure(all)+PowerWeapon", chain.Name);
+            Assert.Equal(GearChain.Unlimited, chain.Priorities[2].MaxAccessorySlots);
+            Assert.True(chain.Priorities[2].PinTopPowerWeapon);
+            // An objective whose own name has a space in it.
+            Assert.Equal("Energy NGU(2)", GearChain.Parse("Energy NGU(2)").Name);
+        }
+
+        // Strict: a chain with a step silently missing is a different chain.
+        [Theory]
+        [InlineData("Adventure")]                        // not a chain at all
+        [InlineData("Adventure(3) > Nonsense(1)")]       // unknown objective
+        [InlineData("Adventure(3) > (1)")]               // no objective
+        [InlineData("Adventure(-1)")]                    // not a budget
+        [InlineData("Adventure(x)")]
+        [InlineData("Adventure(3")]
+        [InlineData("Adventure(3) >")]
+        [InlineData("Power(1) > Power(1) > Power(1) > Power(1) > Power(1) > Power(1)")]   // six steps
+        public void Parse_RefusesAnythingItCannotReadInFull(string spelled)
+            => Assert.Null(GearChain.Parse(spelled));
+
+        private static KeyValuePair<string, int> S(string objective, int slots)
+            => new KeyValuePair<string, int>(objective, slots);
+
+        // The profile's structured "Priorities" spelling, as the same name.
+        [Fact]
+        public void Spell_TurnsStructuredStepsIntoTheChainsName()
+        {
+            Assert.Equal("Adventure(3) > Respawn(1) > Adventure(all)",
+                         GearChain.Spell(new[] { S("adventure", 3), S("Respawn", 1), S("Adventure", 0) }, false));
+            // The row-level pin lands on the lead step, like the farm presets write it.
+            Assert.Equal("Adventure(0)+PowerWeapon > Drop Chance(all)",
+                         GearChain.Spell(new[] { S("Adventure", -1), S("Drop Chance", 0) }, true));
+        }
+
+        // A negative Slots claims nothing. Mapping it to "all" would let a typo'd -1 swallow every
+        // accessory slot and starve the rest of the chain.
+        [Fact]
+        public void Spell_ANegativeBudgetClaimsNothingAndAnUnknownStepIsDroppedAndReported()
+        {
+            var unknown = new List<string>();
+            Assert.Equal("Respawn(0) > NGUs(all)",
+                         GearChain.Spell(new[] { S("Respawn", -1), S("Nonsense", 2), S("NGUs", 0) }, false, unknown));
+            Assert.Equal(new[] { "Nonsense" }, unknown);
+            Assert.Null(GearChain.Spell(new[] { S("Nonsense", 1) }, false));
+            Assert.Null(GearChain.Spell(null, false));
+        }
+
+        [Fact]
+        public void Spell_UsesOnlyTheFirstFiveSteps()
+        {
+            var six = Enumerable.Range(1, 6).Select(i => S("Power", i));
+            Assert.Equal("Power(1) > Power(2) > Power(3) > Power(4) > Power(5)", GearChain.Spell(six, false));
+        }
+
+        [Fact]
+        public void WithPowerWeapon_PinsTheLeadOfAnyObjectiveOnce()
+        {
+            Assert.Equal("NGUs(all)+PowerWeapon", GearChain.WithPowerWeapon("NGUs"));
+            Assert.Equal("Adventure(3)+PowerWeapon > Respawn(1) > Adventure(all)", GearChain.WithPowerWeapon("Adventure + Respawn"));
+            Assert.Equal("Drop Chance + Adventure", GearChain.WithPowerWeapon("Drop Chance + Adventure"));   // already pinned
+            Assert.Null(GearChain.WithPowerWeapon("Nonsense"));
+        }
+
+        // ── PROFILE ADVICE ────────────────────────────────────────────────────────────────────────
+
+        private static string Profile(string gearRows)
+            => "{ \"Breakpoints\": { \"Gear\": [" + gearRows + "] } }";
+
+        [Fact]
+        public void ProfileWarnings_SaysNothingAboutRowsThatResolve()
+        {
+            Assert.Empty(GearChain.ProfileWarnings(Profile(
+                "{ \"Time\": 0, \"ID\": [1, 2] }," +
+                "{ \"Time\": 60, \"ID\": [], \"Objective\": \"NGUs\" }," +
+                "{ \"Time\": 120, \"ID\": [], \"Objective\": \"Drop Chance + Adventure\" }," +
+                "{ \"Time\": 180, \"ID\": [], \"Objective\": \"Respawn(1) > NGUs(all)\" }," +
+                "{ \"Time\": 240, \"ID\": [], \"Priorities\": [ { \"Objective\": \"Respawn\", \"Slots\": 1 }, { \"Objective\": \"NGUs\" } ] }")));
+            Assert.Empty(GearChain.ProfileWarnings(""));
+            Assert.Empty(GearChain.ProfileWarnings("not json"));
+        }
+
+        [Fact]
+        public void ProfileWarnings_NamesARowThatWillChooseNoGear()
+        {
+            var w = GearChain.ProfileWarnings(Profile(
+                "{ \"Time\": 3600, \"ID\": [], \"Objective\": \"Advent\" }," +
+                "{ \"Time\": 5400, \"ID\": [], \"Objective\": \"Adventure(3) > Nope(1)\" }"));
+            Assert.Equal(2, w.Count);
+            Assert.Contains("\"Advent\" at 1:00 is not recognized", w[0]);
+            Assert.Contains("\"Adventure(3) > Nope(1)\" at 1:30 could not be read", w[1]);
+        }
+
+        [Fact]
+        public void ProfileWarnings_CoversTheStructuredChain()
+        {
+            string steps = string.Join(",", Enumerable.Range(0, 6).Select(_ => "{ \"Objective\": \"Power\", \"Slots\": 1 }"));
+            var tooLong = GearChain.ProfileWarnings(Profile("{ \"Time\": 0, \"ID\": [], \"Priorities\": [" + steps + "] }"));
+            Assert.Contains("has 6 steps; only the first 5 are used", Assert.Single(tooLong));
+
+            var w = GearChain.ProfileWarnings(Profile(
+                "{ \"Time\": 0, \"ID\": [], \"Priorities\": [ { \"Slots\": 1 }, { \"Objective\": \"Nope\" }, { \"Objective\": \"NGUs\", \"Slots\": -2 } ] }"));
+            Assert.Equal(3, w.Count);
+            Assert.Contains("has no Objective", w[0]);
+            Assert.Contains("\"Nope\" at 0:00 is not recognized", w[1]);
+            Assert.Contains("negative Slots", w[2]);
+        }
+
+        // ── THE EDITOR'S SIDE ─────────────────────────────────────────────────────────────────────
+
+        // "Priorities" supersedes Objective at runtime and survives a round trip untouched, so a
+        // setter that states what the row now optimizes for has to take it out.
+        [Fact]
+        public void SettingAGearRowsObjectiveRemovesItsStructuredChain()
+        {
+            string row = "{ \"Time\": 0, \"ID\": [], \"TopPowerWeapon\": true, \"Custom\": \"keep\", " +
+                         "\"Priorities\": [ { \"Objective\": \"Respawn\", \"Slots\": 1 } ] }";
+
+            var untouched = ProfileModel.Load(ProfileModel.Load(Profile(row)).ToJson());
+            Assert.Contains(untouched.Gear[0].Extras, kv => kv.Key == "Priorities");
+            Assert.Contains(untouched.Gear[0].Extras, kv => kv.Key == "TopPowerWeapon");
+
+            foreach (var set in new System.Action<ProfileModel>[]
+            {
+                m => m.SetGearObjective(0, "NGUs", false),
+                m => m.SetGearLock(0, new List<int> { 5 }, "NGUs", false),
+                m => m.SetItems("gear", 0, new List<int> { 5 }),
+            })
+            {
+                var m = ProfileModel.Load(Profile(row));
+                set(m);
+                var reloaded = ProfileModel.Load(m.ToJson());
+                Assert.DoesNotContain(reloaded.Gear[0].Extras, kv => kv.Key == "Priorities" || kv.Key == "TopPowerWeapon");
+                Assert.Contains(reloaded.Gear[0].Extras, kv => kv.Key == "Custom");
+            }
+        }
+
+        [Fact]
+        public void TheEditorSavesAReadableChainAndRefusesAnUnreadableOne()
+        {
+            var m = ProfileModel.Load(Profile("{ \"Time\": 0, \"ID\": [] }"));
+            var ok = BreakpointEditor.Apply(m, "gear", 0, 0, "Lock: 326; Optimize+Respawn: Adventure(3) > Respawn(1) > Adventure(all)", "", null);
+            Assert.True(ok.Ok, ok.Error);
+            var saved = ProfileModel.Load(m.ToJson()).Gear[0];
+            Assert.Equal("Adventure(3) > Respawn(1) > Adventure(all)", saved.Objective);
+            Assert.True(saved.ForceRespawn);
+            Assert.Equal(new[] { 326 }, saved.Items);
+
+            var bad = BreakpointEditor.Apply(m, "gear", 0, 0, "Optimize: Adventure(3) > Nope(1)", "", null);
+            Assert.False(bad.Ok);
+            Assert.Contains("Can't read the chain", bad.Error);
+            Assert.Equal("Adventure(3) > Respawn(1) > Adventure(all)", m.Gear[0].Objective);   // nothing written
+        }
     }
 }

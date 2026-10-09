@@ -231,7 +231,7 @@ namespace NGUAdvisor.Managers
         public bool SetItems(string systemKey, int index, List<int> ids)
         {
             var l = systemKey == "gear" ? Gear : systemKey == "diggers" ? Diggers : systemKey == "beards" ? Beards : null;
-            return At(l, index, b => { b.Items = ids ?? new List<int>(); if (systemKey == "gear") { b.Objective = ""; b.ForceRespawn = false; } });
+            return At(l, index, b => { b.Items = ids ?? new List<int>(); if (systemKey == "gear") { b.Objective = ""; b.ForceRespawn = false; DropLegacyChain(b); } });
         }
 
         /// <summary>How many diggers should be ACTIVE at this breakpoint. 0 clears it (use all unlocked
@@ -244,7 +244,13 @@ namespace NGUAdvisor.Managers
 
         /// <summary>Put a gear breakpoint into optimize-objective mode (clears the manual ID list).</summary>
         public bool SetGearObjective(int index, string objective, bool forceRespawn) =>
-            At(Gear, index, b => { b.Objective = objective ?? ""; b.ForceRespawn = forceRespawn; b.Items = new List<int>(); });
+            At(Gear, index, b => { b.Objective = objective ?? ""; b.ForceRespawn = forceRespawn; b.Items = new List<int>(); DropLegacyChain(b); });
+
+        // The older structured chain keys ride through a round trip as Extras, and at runtime
+        // "Priorities" SUPERSEDES Objective. So a setter that states what the row now optimizes for
+        // has to remove them, or the row would keep running the chain it was just edited away from.
+        private static void DropLegacyChain(ListBreakpoint b) =>
+            b.Extras.RemoveAll(kv => kv.Key == "Priorities" || kv.Key == "TopPowerWeapon");
 
         /// <summary>GEAR LOCK: pin <paramref name="lockedIds"/> AND optimize every remaining slot for
         /// <paramref name="objective"/>. The one setter that writes both halves of a gear breakpoint;
@@ -256,6 +262,7 @@ namespace NGUAdvisor.Managers
                 b.Items = lockedIds ?? new List<int>();
                 b.Objective = objective ?? "";
                 b.ForceRespawn = forceRespawn;
+                DropLegacyChain(b);
             });
 
         /// <summary>Set a single-value breakpoint's value (wandoos/ngudiff).</summary>

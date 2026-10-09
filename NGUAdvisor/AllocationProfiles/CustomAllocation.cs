@@ -45,9 +45,12 @@ namespace NGUAdvisor.AllocationProfiles
                         return;
                     }
 
-                    _wrapper = new BreakpointWrapper(JSON.Parse(File.ReadAllText(_allocationPath))["Breakpoints"]);
+                    string raw = File.ReadAllText(_allocationPath);
+                    _wrapper = new BreakpointWrapper(JSON.Parse(raw)["Breakpoints"]);
 
                     Log(_wrapper.BuildAllocationString(_profileName));
+                    foreach (string warning in Managers.GearChain.ProfileWarnings(raw))
+                        Log($"Profile advice: {warning}");
 
                     DoAllocations();
                 }

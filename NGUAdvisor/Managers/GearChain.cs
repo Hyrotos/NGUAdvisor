@@ -101,6 +101,142 @@ namespace NGUAdvisor.Managers
         public static ChainObjective FindPreset(string name)
             => Presets.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
 
+        // ── CHAINS BY NAME ─────────────────────────────────────────────────────────────────────────
+        // A chain of your own is SPELLED, in the same form Describe prints:
+        //
+        //     Adventure(3) > Respawn(1) > Adventure(all)        Adventure(0)+PowerWeapon > Drop Chance(all)
+        //
+        // and that spelling is its name. Everything that carries a gear objective carries a string --
+        // the profile row, the resolver, the advisor's "did the objective change" test, the readouts --
+        // so a chain that IS a string needs no second channel through any of them, and two rows mean
+        // the same chain exactly when they are spelled the same.
+
+        // Any gear-objective name: a plain objective, a named chain, or a spelled one. Null when it is
+        // none of them -- refuse, don't guess: the caller equips whatever comes back.
+        public static GearObjectives.Objective Find(string name)
+            => FindObjective(name) ?? (GearObjectives.Objective)FindPreset(name) ?? Parse(name);
+
+        private static readonly Dictionary<string, ChainObjective> _parsed = new Dictionary<string, ChainObjective>();
+
+        // A spelled chain, or null if any step is malformed, names no objective, or there are more
+        // than MaxPriorities of them. Strict on purpose: a chain with a step silently missing is a
+        // different chain, and nothing downstream could tell.
+        public static ChainObjective Parse(string spelled)
+        {
+            if (string.IsNullOrEmpty(spelled) || spelled.IndexOf('(') < 0) return null;
+            lock (_parsed)
+            {
+                if (_parsed.TryGetValue(spelled, out var hit)) return hit;
+                var chain = ParseCore(spelled);
+                if (_parsed.Count >= 64) _parsed.Clear();   // names come from hand-edited files
+                _parsed[spelled] = chain;
+                return chain;
+            }
+        }
+
+        private const string PinSuffix = "+PowerWeapon";
+
+        private static ChainObjective ParseCore(string spelled)
+        {
+            var parts = spelled.Split('>');
+            if (parts.Length > MaxPriorities) return null;
+            var steps = new List<GearPriority>(parts.Length);
+            foreach (var raw in parts)
+            {
+                string part = raw.Trim();
+                bool pin = part.EndsWith(PinSuffix, StringComparison.OrdinalIgnoreCase);
+                if (pin) part = part.Substring(0, part.Length - PinSuffix.Length).TrimEnd();
+                int open = part.LastIndexOf('(');
+                if (open <= 0 || !part.EndsWith(")")) return null;
+                var objective = FindObjective(part.Substring(0, open).Trim());
+                if (objective == null) return null;
+                string budget = part.Substring(open + 1, part.Length - open - 2).Trim();
+                int slots;
+                if (string.Equals(budget, "all", StringComparison.OrdinalIgnoreCase)) slots = Unlimited;
+                else if (!int.TryParse(budget, System.Globalization.NumberStyles.None,
+                                       System.Globalization.CultureInfo.InvariantCulture, out slots)) return null;
+                steps.Add(new GearPriority { Objective = objective, MaxAccessorySlots = slots, PinTopPowerWeapon = pin });
+            }
+            // Named by its canonical spelling, so "adventure( 3 )>respawn(1)" reads back tidy.
+            return new ChainObjective(Describe(steps), steps);
+        }
+
+        // The profile's older, structured spelling -- "Priorities": [{ "Objective", "Slots" }] plus a
+        // row-level "TopPowerWeapon" -- as the name of the same chain. Slots 0 or absent means "every
+        // seat left"; a NEGATIVE one claims nothing, so a typo'd -1 cannot swallow the accessory bar.
+        // A step naming no known objective is dropped and reported; null when nothing usable is left.
+        public static string Spell(IEnumerable<KeyValuePair<string, int>> steps, bool pinTopPowerWeapon,
+                                   List<string> unknown = null)
+        {
+            var chain = new List<GearPriority>();
+            foreach (var step in (steps ?? new KeyValuePair<string, int>[0]).Take(MaxPriorities))
+            {
+                var objective = FindObjective(step.Key);
+                if (objective == null) { if (unknown != null) unknown.Add(step.Key ?? ""); continue; }
+                chain.Add(new GearPriority
+                {
+                    Objective = objective,
+                    MaxAccessorySlots = step.Value == 0 ? Unlimited : Math.Max(0, step.Value),
+                    PinTopPowerWeapon = pinTopPowerWeapon && chain.Count == 0,
+                });
+            }
+            return chain.Count == 0 ? null : Describe(chain);
+        }
+
+        // The same objective with the top-Power weapon pinned (a row's "TopPowerWeapon"), as a name.
+        // Null when the name is not a gear objective at all.
+        public static string WithPowerWeapon(string name)
+        {
+            var steps = StepsOf(Find(name));
+            if (steps.Count == 0) return null;
+            if (steps.Any(p => p.PinTopPowerWeapon)) return name;
+            return Describe(steps.Select((p, i) => i != 0 ? p : new GearPriority
+            {
+                Objective = p.Objective,
+                MaxAccessorySlots = p.MaxAccessorySlots,
+                PinTopPowerWeapon = true,
+            }).ToList());
+        }
+
+        // ADVICE about a profile's gear rows, never a failure. A row whose objective resolves to
+        // nothing is not mis-applied, it is SKIPPED -- and a silent skip reads as "the row ran" while
+        // the gear it asked for never goes on. Callers surface these beside the load and never block.
+        public static List<string> ProfileWarnings(string json)
+        {
+            var warnings = new List<string>();
+            ProfileModel model = null;
+            try { if (!string.IsNullOrEmpty(json)) model = ProfileModel.Load(json); } catch { }
+            if (model == null) return warnings;
+
+            foreach (var bp in model.Gear)
+            {
+                string at = $"{bp.Hours}:{bp.Minutes:00}" + (bp.Seconds > 0 ? $":{bp.Seconds:00}" : "");
+                SimpleJSON.JSONNode legacy = null;
+                foreach (var kv in bp.Extras) if (kv.Key == "Priorities") legacy = kv.Value;
+
+                if (legacy != null && legacy.IsArray && legacy.Count > 0)
+                {
+                    if (legacy.Count > MaxPriorities)
+                        warnings.Add($"A gear priority chain at {at} has {legacy.Count} steps; only the first {MaxPriorities} are used.");
+                    foreach (var step in legacy.AsArray.Children.Take(MaxPriorities))
+                    {
+                        string name = step["Objective"]?.Value ?? "";
+                        if (name == "")
+                            warnings.Add($"A gear priority step at {at} has no Objective and will be skipped.");
+                        else if (FindObjective(name) == null)
+                            warnings.Add($"Gear priority objective \"{name}\" at {at} is not recognized; that step will be skipped.");
+                        if ((step["Slots"]?.AsInt ?? 0) < 0)
+                            warnings.Add($"Gear priority \"{name}\" at {at} has negative Slots; it will claim no accessory slots.");
+                    }
+                }
+                else if (!string.IsNullOrEmpty(bp.Objective) && Find(bp.Objective) == null)
+                    warnings.Add(bp.Objective.IndexOf('(') >= 0
+                        ? $"Gear chain \"{bp.Objective}\" at {at} could not be read (every step is Objective(slots) or Objective(all), at most {MaxPriorities}, joined by \">\"); that row will choose no gear."
+                        : $"Gear objective \"{bp.Objective}\" at {at} is not recognized; that row will choose no gear.");
+            }
+            return warnings;
+        }
+
         // Any objective as a chain, so the solver handles exactly one shape: a preset is its own
         // steps, a plain objective is one step that may take every accessory slot.
         public static IReadOnlyList<GearPriority> StepsOf(GearObjectives.Objective obj)

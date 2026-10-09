@@ -68,6 +68,26 @@ namespace NGUAdvisor.AllocationProfiles.Breakpoints
             var id = bp["ID"];
             if (id != null && id.IsArray)
                 spec.Ids = id.AsArray.Children.Select(x => x.AsInt).ToArray();
+
+            // A chain is carried as its NAME (GearChain.Find resolves a spelled chain), so the two
+            // older structured keys are folded into Objective here and nothing past this point knows
+            // they existed. "Priorities" supersedes Objective, as it always did.
+            var powerWeapon = bp["TopPowerWeapon"];
+            bool pinWeapon = powerWeapon != null && powerWeapon.AsBool;
+            var chain = bp["Priorities"];
+            if (chain != null && chain.IsArray && chain.Count > 0)
+            {
+                var unknown = new System.Collections.Generic.List<string>();
+                string spelled = GearChain.Spell(
+                    chain.AsArray.Children.Select(step => new System.Collections.Generic.KeyValuePair<string, int>(
+                        step["Objective"]?.Value ?? "", step["Slots"]?.AsInt ?? 0)),
+                    pinWeapon, unknown);
+                foreach (var name in unknown)
+                    Main.LogDebug($"Gear priority objective '{name}' not recognized; step skipped.");
+                if (spelled != null) spec.Objective = spelled;
+            }
+            else if (pinWeapon && spec.Objective != null)
+                spec.Objective = GearChain.WithPowerWeapon(spec.Objective) ?? spec.Objective;
             return spec;
         }
 

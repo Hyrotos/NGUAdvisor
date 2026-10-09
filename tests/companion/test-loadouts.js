@@ -973,6 +973,38 @@ window.addEventListener("load", guard(() => {
            ed.querySelector(".peg-locklabel").textContent === "Items to wear");
       }
 
+      // A SPELLED CHAIN is an objective name, so it rides in the same payload clause. The picker
+      // cannot list it, and used to call it "not recognised".
+      ed = openBp("gear", "Lock: 301; Optimize+Respawn: Adventure(3) > Respawn(1) > Adventure(all)");
+      if (ed) {
+        const sel = ed.querySelector('[data-k="gearobj"]'), chain = ed.querySelector('[data-k="gearchain"]');
+        ok("a spelled chain selects Custom chain, not 'not recognised'",
+           sel.value === "__chain__" && !/not recognised/.test(sel.textContent), sel.value);
+        ok("the chain field is shown and carries the spelling",
+           !ed.querySelector(".peg-chainrow").hidden && chain.value === "Adventure(3) > Respawn(1) > Adventure(all)", chain.value);
+        ok("a spelled chain round-trips verbatim",
+           payloadOf(ed) === "Lock: 301; Optimize+Respawn: Adventure(3) > Respawn(1) > Adventure(all)", payloadOf(ed));
+
+        chain.value = "Respawn(1) > NGUs(all); x: y";
+        chain.dispatchEvent(new window.Event("change", { bubbles: true }));
+        ok("editing the chain rewrites the payload, without the payload's own separators",
+           payloadOf(ed) === "Lock: 301; Optimize+Respawn: Respawn(1) > NGUs(all) x y", payloadOf(ed));
+
+        sel.value = "NGUs";
+        sel.dispatchEvent(new window.Event("change", { bubbles: true }));
+        ok("picking a listed objective hides the chain field and drops the chain",
+           ed.querySelector(".peg-chainrow").hidden && payloadOf(ed) === "Lock: 301; Optimize+Respawn: NGUs", payloadOf(ed));
+      }
+      ed = openBp("gear", "Optimize: NGUs");
+      if (ed) {
+        const sel = ed.querySelector('[data-k="gearobj"]');
+        ok("a listed objective keeps the chain field hidden", ed.querySelector(".peg-chainrow").hidden);
+        sel.value = "__chain__";
+        sel.dispatchEvent(new window.Event("change", { bubbles: true }));
+        ok("Custom chain with nothing typed is not an objective",
+           !ed.querySelector(".peg-chainrow").hidden && payloadOf(ed) === "", payloadOf(ed));
+      }
+
       // An empty gear row must not invent content, and must say what to do.
       ed = openBp("gear", "");
       if (ed) {

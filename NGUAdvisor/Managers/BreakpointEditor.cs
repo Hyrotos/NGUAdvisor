@@ -124,6 +124,13 @@ namespace NGUAdvisor.Managers
                     objective = colon >= 0 ? c.Substring(colon + 1).Trim() : "";
                     if (objective.Length == 0)
                         return Result.Fail("Gear objective is empty (use \"Optimize: <objective>\").");
+                    // A spelled chain that cannot be read would save as a row that chooses no gear.
+                    // Only chains are checked: a plain name the list does not know has always been
+                    // accepted here, and is reported in the log when the profile loads.
+                    if (objective.IndexOf('(') >= 0 && GearChain.Parse(objective) == null)
+                        return Result.Fail("Can't read the chain \"" + objective + "\". Write each step as Objective(slots) or " +
+                                           "Objective(all), joined by \">\" — at most " + GearChain.MaxPriorities +
+                                           " steps, e.g. Adventure(3) > Respawn(1) > Adventure(all).");
                     continue;
                 }
 
