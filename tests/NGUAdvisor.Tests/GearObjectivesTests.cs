@@ -125,6 +125,24 @@ namespace NGUAdvisor.Tests
             Assert.Contains(GearObjectives.Stat.Toughness, adventure.Stats);
         }
 
+        // Kill rate is linear in Power and Toughness only has to clear a threshold, so Power carries
+        // twice the weight. With equal weights a point of Toughness out-priced a point of Power.
+        [Fact]
+        public void Adventure_weighs_power_twice_as_heavily_as_toughness()
+        {
+            var adventure = GearObjectives.Objectives.First(o => o.Name == "Adventure");
+            Assert.Equal(new[] { GearObjectives.Stat.Power, GearObjectives.Stat.Toughness }, adventure.Stats);
+            Assert.Equal(new[] { 1.0, 0.5 }, adventure.Exponents);
+
+            // Same total stats either way; the set that puts them into Power must win.
+            var power = new GearScorer.Item(); power.Stats[GearObjectives.Stat.Power] = 400; power.Stats[GearObjectives.Stat.Toughness] = 100;
+            var tough = new GearScorer.Item(); tough.Stats[GearObjectives.Stat.Power] = 100; tough.Stats[GearObjectives.Stat.Toughness] = 400;
+            double p = GearScorer.ScoreRaw(new[] { power }, adventure.Stats, adventure.Exponents, 100);
+            double t = GearScorer.ScoreRaw(new[] { tough }, adventure.Stats, adventure.Exponents, 100);
+            Assert.True(p > t);
+            Assert.Equal(2.0, p / t, 9);   // (4 x 1^0.5) / (1 x 4^0.5)
+        }
+
         [Theory]
         // The names the advisor hard-codes. If one is renamed, FindObjective returns null at runtime and
         // the affected path silently stops optimizing — these are the ones that must never drift.
