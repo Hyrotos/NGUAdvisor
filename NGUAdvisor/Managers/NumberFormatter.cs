@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace NGUAdvisor.Managers
 {
@@ -32,15 +33,19 @@ namespace NGUAdvisor.Managers
             if (mant == "1000")
             {
                 if (i < Suffixes.Length - 1) { a /= 1000; i++; mant = Mantissa(a); }
-                else return sign + Math.Abs(v).ToString("0.##e+0");   // past the top suffix -> scientific
+                else return sign + Math.Abs(v).ToString("0.##e+0", CultureInfo.InvariantCulture);   // past the top suffix -> scientific
             }
             if (a >= 1000)   // exhausted the ladder and still huge (>= ~1e36) -> scientific on the true value
-                return sign + Math.Abs(v).ToString("0.##e+0");
+                return sign + Math.Abs(v).ToString("0.##e+0", CultureInfo.InvariantCulture);
             return sign + mant + Suffixes[i];
         }
 
         // ~3 significant figures for a mantissa in [0, 1000), trailing zeros trimmed (so 5 -> "5", not "5.00").
+        // InvariantCulture on every path: on a comma-decimal locale (cs-CZ, de-DE) the default culture
+        // rendered "1,5K", which broke the abbreviation tests and displayed the wrong separator in-game.
         private static string Mantissa(double m) =>
-            m >= 100 ? m.ToString("0") : m >= 10 ? m.ToString("0.#") : m.ToString("0.##");
+            m >= 100 ? m.ToString("0", CultureInfo.InvariantCulture)
+            : m >= 10 ? m.ToString("0.#", CultureInfo.InvariantCulture)
+            : m.ToString("0.##", CultureInfo.InvariantCulture);
     }
 }
