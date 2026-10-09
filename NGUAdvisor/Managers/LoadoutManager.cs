@@ -286,15 +286,13 @@ namespace NGUAdvisor.Managers
                 // Time Machine, Basic Training, NGUs, Wishes, Blood Magic and Hacks. Eight is a constant
                 // of the game's method, not something to count here.
                 //
-                // Nothing re-allocates on the way out: no call site asks for it. The re-seat is ambient,
-                // picked up by whichever timer fires first — QuickStuff at 0.5 s, which is GATED on not
-                // being in a boss fight, or AutomationRoutine at 10 s, which is not. So the cost is
-                // bounded but variable, and the variable that matters (were you mid-fight?) is exactly
-                // the one a fixed "~0.5 s" string would get wrong.
+                // Nothing re-allocates on the way out, so this stamp is also the REQUEST for it:
+                // Main.QuickStuff (0.5 s) runs an allocation pass while it is armed. Before that the
+                // re-seat was ambient and in practice waited for the 10 s AutomationRoutine.
                 //
-                // Hence a stamp, not a message. CustomAllocation reports the MEASURED gap the next time
-                // an allocation pass completes, so the number the operator reads is the number that
-                // happened. Twelve triggers reach this method and all of them pass through here.
+                // CustomAllocation reports the MEASURED gap when that pass completes and clears the
+                // stamp, so the number the operator reads is the number that happened. Twelve triggers
+                // reach this method and all of them pass through here.
                 AllocationClearedAt = DateTime.UtcNow;
 
                 // One choke point, every equip in the product. Breakpoints, all six lock subsystems,
@@ -309,7 +307,7 @@ namespace NGUAdvisor.Managers
                     "Requested " + want.Length + ", worn " + wornNow.Length + ", kept " + kept.Length +
                         (missed.Length > 0 ? ", missed " + missed.Length : ""),
                     "Every swap first zeroes committed energy, magic and R3 across eight controllers",
-                    "Re-seated by whichever allocation timer fires first — 0.5s idle, 10s in a fight");
+                    "Re-seated by the next fast-loop pass, about half a second later");
 
                 if (missed.Length == 0)
                     Log(kept.Length == 0

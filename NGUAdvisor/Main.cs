@@ -953,6 +953,15 @@ namespace NGUAdvisor
                 var needsAllocation = false;
                 if (Character.bossID == 0)
                     needsAllocation = true;
+                // A GEAR SWAP ZEROES EVERY ALLOCATION (LoadoutManager.ChangeGear has to, or the game
+                // silently reverts the swap), and nothing asked for them back: the re-seat was left to
+                // "whichever timer fires first", and the only one that does outside the first boss of a
+                // run is the 10 s AutomationRoutine. So every swap -- a gold snipe is two, there and
+                // back -- left energy, magic and R3 idle for up to ten seconds (user-reported
+                // 2026-10-09). The stamp ChangeGear already arms is the request; the pass that
+                // completes clears it (CustomAllocation.ReportReseatAfterGearSwap).
+                if (LoadoutManager.AllocationClearedAt.HasValue)
+                    needsAllocation = true;
 
                 if (Settings.AutoFight || Settings.MoneyPitRunMode)
                 {

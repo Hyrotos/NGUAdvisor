@@ -311,8 +311,8 @@ namespace NGUAdvisor.AllocationProfiles
                 // Eight is Character.removeAllEnergyAndMagic()'s own fixed list, not a count taken here.
                 var detail = $"{mode} · allocation cleared on 8 systems, re-seated after {secs:0.0}s";
 
-                // A long window is a genuine warning: it means the re-seat waited on the 10s loop because
-                // the 0.5s one is gated on not being mid-fight. A short one is just what a swap costs.
+                // A long window is a genuine warning: the fast loop is meant to re-seat within half a
+                // second, so this means the pass was held up. A short one is just what a swap costs.
                 if (secs >= 3.0) Activity.Warning("Gear swap paused 8 systems", detail);
                 else Activity.Completed("Gear swap re-seated", detail);
             }
