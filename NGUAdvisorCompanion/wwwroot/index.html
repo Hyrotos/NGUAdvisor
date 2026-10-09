@@ -207,7 +207,11 @@
      longest breadcrumb the group eyebrow used to overflow its shrunken box and print over the pill.
      Clip it instead — the title beside it already ellipsizes. */
   .crumb .grp { color: var(--faint); white-space: nowrap; min-width: 0; overflow: hidden; }
-  .crumb h1 { margin: 0; font-size: var(--fs-5); font-family: var(--display); letter-spacing: .01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* The padding (taken back by the margin, so nothing moves) is room for the FIRST GLYPH. overflow:hidden
+     clips at the padding edge, and a bold face can draw left of its own origin — under Wine's fallback
+     fonts the "B" of "Blood" lost its stem while "Overview" looked fine. With no padding the clip edge
+     sits exactly on the origin, so any overhang at all is cut. */
+  .crumb h1 { margin: 0 -.2em; padding: 0 .2em; font-size: var(--fs-5); font-family: var(--display); letter-spacing: .01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .topbar .pill, .topbar .stat, .topbar .dseg, .topbar .btn { flex: none; }
   .hamb { display: none; }
 
