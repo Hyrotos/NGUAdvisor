@@ -1400,13 +1400,13 @@
                rendered on `typeof tit.regen === "number"`, exactly like atk/def: absent means "this
                objective has no regen gate to show", which a 0%-wide bar would misreport as "no regen".
                The .res-row grid stacks any number of rows, so nothing else moves. -->
-          <div class="seclabel"><span class="eyebrow">Autokill readiness</span></div>
+          <div class="seclabel"><span class="eyebrow" id="titanStageLabel">Autokill readiness</span></div>
           <div class="mh"><span class="hint" id="titanTarget">—</span></div>
           <div class="res-row" id="titanBars" style="margin-top:13px; max-width:520px;">
             <div class="r"><span class="n">Atk</span><div class="track" role="progressbar" aria-label="Titan attack readiness" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:0%"></div></div><span class="p">—</span></div>
             <div class="r"><span class="n">Def</span><div class="track" role="progressbar" aria-label="Titan defence readiness" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:0%"></div></div><span class="p">—</span></div>
           </div>
-          <div class="verdict">Autokill unlocks at <b style="color:var(--muted)">100%</b> of every gate shown.</div>
+          <div class="verdict" id="titanVerdict">Autokill unlocks at <b style="color:var(--muted)">100%</b> of every gate shown.</div>
         </div>
         <!-- Autokill status for EVERY titan, from titans.ak. Sits OUTSIDE .readout and .manual on
              purpose (the .tl-summary precedent): it is a readout in either decision layer, and
@@ -3303,6 +3303,15 @@
     if(tt) setText(tt, tit.known
       ? ("Target: "+(tit.name||"—")+(tit.stage?(" · "+tit.stage):""))
       : "No titan objective in reach right now.");
+    // The bars measure the objective's CURRENT rung (first kill -> idle -> auto-kill), so the heading
+    // and the sentence under them have to name that rung: "Autokill unlocks at 100%" beside bars
+    // scaled to the guide's manual first-kill stats promised an autokill the game would not give.
+    var tStage = tit.known ? tit.stage : "";
+    var tLbl = tStage==="first kill" ? "First-kill readiness" : tStage==="idle" ? "Idle-kill readiness" : "Autokill readiness";
+    var tLead = tStage==="first kill" ? "A manual first kill is in reach at "
+              : tStage==="idle" ? "Idle kills are in reach at " : "Autokill unlocks at ";
+    setText($("titanStageLabel"), tLbl);
+    writeHtml($("titanVerdict"), "titanVerdict", tLead+'<b style="color:var(--muted)">100%</b> of every '+(tStage==="first kill"||tStage==="idle"?"bar":"gate")+' shown.');
     // Compliance: when the user is already adventuring in the recommended boost zone, every boost
     // status badge (nav dot, dashboard card, system-view readout) flips warn/"Suggest" -> ok/"On target".
     var bfCompliant = !!bf.compliant, bfSev = bfCompliant ? "ok" : "warn", bfTxt = bfCompliant ? "On target" : "Suggest";
