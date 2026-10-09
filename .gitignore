@@ -368,3 +368,6 @@ dist_*.zip
 
 # local in-game test checklist, not part of this repo
 /docs/INGAME-TESTS.md
+
+# local backlog of ideas, not part of this repo
+/docs/BACKLOG.md
