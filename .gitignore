@@ -365,3 +365,6 @@ dist_*.zip
 
 # local agent tooling, not part of this repo
 /.github/
+
+# local in-game test checklist, not part of this repo
+/docs/INGAME-TESTS.md
