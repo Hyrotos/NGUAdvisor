@@ -257,8 +257,11 @@ window.addEventListener("load", guard(() => {
   // ---- 9. objective dropdowns ---------------------------------------------------------------
   const titanSel = $("set-TitanObjective");
   ok("titan objective select exists", !!titanSel);
-  ok("objective options were built", titanSel && titanSel.options.length === GEAR_OBJECTIVES.length + 1,
+  // The listed objectives, between the "" lead and the trailing "Custom chain…".
+  ok("objective options were built", titanSel && titanSel.options.length === GEAR_OBJECTIVES.length + 2,
      titanSel && String(titanSel.options.length));
+  ok("the picker ends with Custom chain",
+     titanSel && titanSel.options[titanSel.options.length - 1].value === "__chain__");
   ok("mode selects lead with 'Manual — use item list'",
      titanSel && /Manual/.test(titanSel.options[0].textContent), titanSel && titanSel.options[0].textContent);
   const mainSel = $("set-GearObjective");
@@ -266,6 +269,75 @@ window.addEventListener("load", guard(() => {
   ok("Main leads with 'Follow the profile timeline'",
      mainSel && /Follow the profile timeline/.test(mainSel.options[0].textContent),
      mainSel && mainSel.options[0].textContent);
+
+  // ---- 9b. a custom chain as a loadout objective --------------------------------------------
+  // The objective is a string setting, and a chain is a longer string: the picker says "Custom
+  // chain…" and the rows under it write that same setting.
+  {
+    const fireOn = (el, type) => el.dispatchEvent(new window.Event(type, { bubbles: true }));
+    const box = $("lc-TitanObjective");
+    const rows = () => Array.from(box.querySelectorAll(".peg-step"));
+    const lastSet = () => SENT.filter(m => m.cmd === "setSetting" && m.key === "TitanObjective").pop();
+    ok("each objective picker has a chain box, hidden", !!box && box.hidden && !!$("lc-GearObjective"));
+    // Non-empty id lists throughout, so picking an objective here never schedules the debounced
+    // "fill the empty list" that section 11 counts.
+    const full = { TitanLoadout: [94], GoldDropLoadout: [94] };
+    const withSettings = st => baseSnapshot({ settings: st, loadouts: full });
+
+    // The advisor reports a chain: the picker cannot list it, so it shows Custom chain + the rows.
+    send(withSettings({ TitanObjective: "Adventure(0)+PowerWeapon > Drop Chance(all)" }));
+    ok("a chain setting selects Custom chain", titanSel.value === "__chain__", titanSel.value);
+    ok("and shows its steps", !box.hidden && rows().length === 2 &&
+       rows()[0].querySelector('[data-cstep="slots"]').value === "0" && box.querySelector(".cs-pin").checked);
+    ok("other modes stay untouched", $("lc-GoldObjective").hidden && $("set-GoldObjective").value === "");
+
+    SENT.length = 0;
+    const slots = rows()[1].querySelector('[data-cstep="slots"]');
+    slots.value = "2"; fireOn(slots, "change");
+    ok("changing a step writes the objective setting",
+       lastSet() && lastSet().value === "Adventure(0)+PowerWeapon > Drop Chance(2)", JSON.stringify(SENT));
+    fireOn(box.querySelector(".cs-add"), "click");
+    ok("adding a step writes it too", lastSet() && /> Drop Chance\(2\) > .+\(all\)$/.test(lastSet().value), JSON.stringify(lastSet()));
+    ok("a redraw keeps the rows the user built", rows().length === 3);
+
+    // A snapshot echoing the pending value must not rebuild the rows.
+    const firstRow = rows()[0];
+    send(withSettings({ TitanObjective: lastSet().value }));
+    ok("the echo does not rebuild the rows", rows()[0] === firstRow && titanSel.value === "__chain__");
+
+    // Back to a listed objective: the rows go away and the plain name is written.
+    SENT.length = 0;
+    fireOn(titanSel, "focusin");
+    titanSel.value = "Adventure"; fireOn(titanSel, "change");
+    ok("picking a listed objective hides the rows and writes the name",
+       box.hidden && lastSet() && lastSet().value === "Adventure", JSON.stringify(SENT));
+
+    // And picking Custom chain again resumes the chain that was built, rather than starting over.
+    SENT.length = 0;
+    fireOn(titanSel, "focusin");
+    titanSel.value = "__chain__"; fireOn(titanSel, "change");
+    ok("Custom chain resumes the last chain built for the mode",
+       !box.hidden && rows().length === 3 && lastSet() && /^Adventure\(0\)\+PowerWeapon > /.test(lastSet().value), JSON.stringify(lastSet()));
+    ok("the placeholder value is never sent", SENT.every(m => m.value !== "__chain__" && m.objective !== "__chain__"), JSON.stringify(SENT));
+
+    // A mode that never had a chain starts from one step taking every slot.
+    const titanChain = lastSet().value;
+    SENT.length = 0;
+    const goldSel = $("set-GoldObjective");
+    fireOn(goldSel, "focusin");
+    goldSel.value = "__chain__"; fireOn(goldSel, "change");
+    const goldSet = SENT.filter(m => m.cmd === "setSetting" && m.key === "GoldObjective").pop();
+    ok("a first custom chain is one step taking every slot",
+       !$("lc-GoldObjective").hidden && goldSet && /^[^>(]+\(all\)$/.test(goldSet.value), JSON.stringify(goldSet));
+
+    ok("no objective fill was scheduled over a non-empty list", !SENT.some(m => m.cmd === "applyObjective"));
+    // Confirm what is pending, then go back to the fixture the checks below expect.
+    send(withSettings({ TitanObjective: titanChain, GoldObjective: goldSet.value }));
+    titanSel.blur(); goldSel.blur();
+    send(baseSnapshot());
+    ok("clearing the setting hides the rows again", box.hidden && titanSel.value === "" && $("lc-GoldObjective").hidden,
+       titanSel.value);
+  }
 
   // ---- 10. Main has no id list; the others do ------------------------------------------------
   ok("Main renders no id list", !$("Main"));

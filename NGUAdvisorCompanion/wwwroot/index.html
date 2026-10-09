@@ -1130,6 +1130,7 @@
   /* Gear chain steps: the loadout list's row, holding two pickers instead of an id. */
   .peg-step .tle-sel { min-width: 0; flex: 1 1 0; }
   .peg-step .peg-slots { flex: 0 1 190px; }
+  .lo-chain { margin-top: var(--sp-2); }
   .peg-spell { font-family: var(--mono); font-size: var(--fs-2); color: var(--muted); overflow-wrap: anywhere; }
   /* .tin hard-sets width:46px, and with border-box that leaves 34px of text — about five characters
      of 11px mono, before a number input's spinner takes another ~17px. So the placeholders rendered as
@@ -1779,7 +1780,9 @@
                '<select class="inp" id="set-'+m.obj+'" aria-label="'+m.name+' loadout objective (Advisor)" data-setting="'+m.obj+'" data-dyn="gearObjectives" data-str="1"'+
                (m.main ? ' data-empty="Follow the profile timeline"' : ' data-fillfor="'+m.key+'"')+'></select></div></div>'+
                '<div class="switchwrap"><label class="switch"><input type="checkbox" role="switch" data-setting="'+m.resp+'">'+
-               '<span class="sw" aria-hidden="true"></span>Keep Respawn</label></div>';
+               '<span class="sw" aria-hidden="true"></span>Keep Respawn</label></div>'+
+               // The rows of a custom chain, shown when the picker above says "Custom chain…".
+               '<div class="lo-chain cs-box" id="lc-'+m.obj+'" hidden></div>';
         } else if(m.loot){
           h += '<div class="fieldgrid">'+
                '<div class="field"><label for="set-LootHunterRespawnCount">Advisor picks — × Respawn</label><input class="inp" id="set-LootHunterRespawnCount" aria-label="Loot Hunter — respawn multiplier" type="number" inputmode="numeric" min="0" max="20" data-setting="LootHunterRespawnCount"></div>'+
@@ -4924,15 +4927,13 @@
   function peIsChain(name){ return String(name||"").indexOf("(")>=0; }
 
   // THE CHAIN FORM. One row per step — an objective, and how many of the accessory slots still free
-  // it may take — because that is what a chain IS; the spelling is only how it is stored. The rows are
-  // the truth while the editor is open and the hidden [data-k="gearchain"] input carries their
-  // spelling, so everything downstream (peSyncGear, Save) still reads one string.
-  var PE_MAX_STEPS = 5, PE_MAX_SLOTS = 16;
-  var PE_STEPS = [], PE_PIN = false, PE_CHAIN_NAMES = null;
-  // A chain the profile carries that the rows cannot show (hand-edited, and malformed). It is kept
-  // VERBATIM until a row is touched, so opening the editor and saving something else on the row can
-  // never swap it for the default chain.
-  var PE_RAW = "";
+  // it may take — because that is what a chain IS; the spelling is only how it is stored.
+  //
+  // It is used in two places that store the result differently: the profile editor's gear row (one
+  // chain, serialised into the row's payload on Save) and the Loadouts page (one per mode, written
+  // straight to that mode's objective setting). So the form itself owns nothing but a state object
+  // and a box to draw in; each host decides what a change means.
+  var PE_MAX_STEPS = 5, PE_MAX_SLOTS = 16, PE_CHAIN_NAMES = null;
   // What a step may optimise for: every objective that is not itself a chain.
   function peStepObjectives(){
     var all = GEAR_OBJECTIVES || [];
@@ -4951,23 +4952,39 @@
     }
     return steps.length ? { steps:steps, pin:pin } : null;
   }
-  function peSpellChain(){
-    if(PE_RAW) return PE_RAW;
-    return PE_STEPS.filter(function(s){ return s.obj; }).map(function(s, i){
-      return s.obj+"("+(s.slots==="" ? "all" : s.slots)+")"+(PE_PIN && i===0 ? "+PowerWeapon" : "");
+  // `raw` is a chain the rows cannot show (hand-edited, and malformed). It is kept VERBATIM until a
+  // row is touched, so merely opening the form can never swap it for the default chain.
+  function chainNew(){ return { steps:[], pin:false, raw:"" }; }
+  function chainLoad(st, objective){
+    var parsed = peIsChain(objective) ? peParseChain(objective) : null;
+    st.steps = parsed ? parsed.steps.slice(0, PE_MAX_STEPS) : [{ obj:peStepObjectives()[0]||"", slots:"" }];
+    st.pin = !!(parsed && parsed.pin);
+    st.raw = peIsChain(objective) && !parsed ? String(objective) : "";
+  }
+  function chainSpell(st){
+    if(st.raw) return st.raw;
+    return st.steps.filter(function(s){ return s.obj; }).map(function(s, i){
+      return s.obj+"("+(s.slots==="" ? "all" : s.slots)+")"+(st.pin && i===0 ? "+PowerWeapon" : "");
     }).join(" > ");
   }
-  function peLoadChain(objective){
-    var parsed = peIsChain(objective) ? peParseChain(objective) : null;
-    var first = peStepObjectives()[0] || "";
-    PE_STEPS = parsed ? parsed.steps.slice(0, PE_MAX_STEPS) : [{ obj:first, slots:"" }];
-    PE_PIN = !!(parsed && parsed.pin);
-    PE_RAW = peIsChain(objective) && !parsed ? String(objective) : "";
+  // The form's shell. `id` prefixes the three ids, so two forms on one page stay distinct.
+  function chainMarkup(id){
+    return '<div class="listed cs-steps" id="'+id+'Steps"></div>'+
+      '<div class="le-add"><button class="btn cs-add" type="button" id="'+id+'StepAdd">Add step</button>'+
+      '<label class="tle-time"><input type="checkbox" class="cs-pin" id="'+id+'Pin"> <span class="mut">hold your hardest-hitting weapon in the main hand</span></label></div>'+
+      '<div class="tle-hint mut">Steps run in order, at most '+PE_MAX_STEPS+'. Each takes its share of the accessory slots still free, '+
+      'and hands on what it does not fill. Weapons and armour go to the first step whose stats they carry.</div>'+
+      '<div class="peg-spell cs-spell"></div>';
   }
-  function peDrawChain(ed){
-    var box=ed.querySelector("#pegSteps"); if(!box) return;
+  function chainSay(box, st){
+    var spell=box.querySelector(".cs-spell");
+    if(spell) spell.textContent = st.raw ? "Can’t show “"+st.raw+"” as steps — it is kept as written until you change a step."
+                                         : chainSpell(st);
+  }
+  function chainDraw(box, st){
+    var list=box.querySelector(".cs-steps"); if(!list) return;
     var objs=peStepObjectives();
-    box.innerHTML = PE_STEPS.map(function(s, i){
+    list.innerHTML = st.steps.map(function(s, i){
       var names = objs.indexOf(s.obj)>=0 || !s.obj ? objs : [s.obj].concat(objs);   // keep a name the list lacks
       var osel = names.map(function(n){ return '<option value="'+esc(n)+'"'+(n===s.obj?' selected':'')+'>'+esc(n)+'</option>'; }).join("");
       var counts = [];
@@ -4982,43 +4999,114 @@
         '<select class="tle-sel peg-slots" data-cstep="slots" aria-label="Step '+(i+1)+' accessory slots">'+ssel+'</select>'+
         '<span class="le-ctrls">'+
         '<button class="le-btn" type="button" data-cstepmove="up" aria-label="Move step '+(i+1)+' up"'+(i===0?' disabled':'')+'>↑</button>'+
-        '<button class="le-btn" type="button" data-cstepmove="down" aria-label="Move step '+(i+1)+' down"'+(i===PE_STEPS.length-1?' disabled':'')+'>↓</button>'+
-        '<button class="le-btn" type="button" data-cstepremove aria-label="Remove step '+(i+1)+'"'+(PE_STEPS.length<2?' disabled':'')+'>✕</button>'+
+        '<button class="le-btn" type="button" data-cstepmove="down" aria-label="Move step '+(i+1)+' down"'+(i===st.steps.length-1?' disabled':'')+'>↓</button>'+
+        '<button class="le-btn" type="button" data-cstepremove aria-label="Remove step '+(i+1)+'"'+(st.steps.length<2?' disabled':'')+'>✕</button>'+
         '</span></div>';
     }).join("");
-    var add=ed.querySelector("#pegStepAdd"); if(add) add.disabled = PE_STEPS.length>=PE_MAX_STEPS;
-    var pin=ed.querySelector("#pegPin"); if(pin) pin.checked = PE_PIN;
-    peChainChanged(ed);
+    var add=box.querySelector(".cs-add"); if(add) add.disabled = st.steps.length>=PE_MAX_STEPS;
+    var pin=box.querySelector(".cs-pin"); if(pin) pin.checked = st.pin;
+    chainSay(box, st);
   }
-  // The rows changed: re-spell into the hidden field and let the gear form re-serialise.
-  function peChainChanged(ed){
-    var hidden=ed.querySelector('[data-k="gearchain"]'); if(hidden) hidden.value = peSpellChain();
-    var spell=ed.querySelector(".peg-spell");
-    if(spell) spell.textContent = PE_RAW ? "Can’t show “"+PE_RAW+"” as steps — it is kept as written until you change a step."
-                                         : peSpellChain();
-    peSyncGear(ed);
-  }
-  function peChainEvent(ed, t, isClick){
+  // A control inside the form was used. True when it was one of ours — the state has changed and the
+  // host must store it.
+  function chainEvent(box, st, t, isClick){
     var row = t.closest ? t.closest(".peg-step") : null, i = row ? parseInt(row.getAttribute("data-i"),10) : -1;
-    PE_RAW = "";   // any touch means the rows are now what the user wants
+    var cl = t.classList, has = function(c){ return !!(cl && cl.contains(c)); };
     if(!isClick){
-      if(t.id==="pegPin"){ PE_PIN = !!t.checked; peChainChanged(ed); return true; }
-      var k = t.getAttribute && t.getAttribute("data-cstep");
-      if(!k || !PE_STEPS[i]) return false;
-      PE_STEPS[i][k] = t.value;
-      peChainChanged(ed);
+      if(has("cs-pin")){ st.pin = !!t.checked; }
+      else {
+        var k = t.getAttribute && t.getAttribute("data-cstep");
+        if(!k || !st.steps[i]) return false;
+        st.steps[i][k] = t.value;
+      }
+      st.raw = "";   // any touch means the rows are now what the user wants
+      chainSay(box, st);
       return true;
     }
-    if(t.id==="pegStepAdd"){
-      if(PE_STEPS.length<PE_MAX_STEPS) PE_STEPS.push({ obj:peStepObjectives()[0]||"", slots:"" });
+    if(has("cs-add")){
+      if(st.steps.length<PE_MAX_STEPS) st.steps.push({ obj:peStepObjectives()[0]||"", slots:"" });
     } else if(t.hasAttribute && t.hasAttribute("data-cstepremove")){
-      if(PE_STEPS.length>1 && PE_STEPS[i]) PE_STEPS.splice(i,1);
+      if(st.steps.length>1 && st.steps[i]) st.steps.splice(i,1);
     } else if(t.getAttribute && t.getAttribute("data-cstepmove")){
       var j = t.getAttribute("data-cstepmove")==="up" ? i-1 : i+1;
-      if(!PE_STEPS[i] || j<0 || j>=PE_STEPS.length) return true;
-      var tmp=PE_STEPS[i]; PE_STEPS[i]=PE_STEPS[j]; PE_STEPS[j]=tmp;
+      if(!st.steps[i] || j<0 || j>=st.steps.length) return false;
+      var tmp=st.steps[i]; st.steps[i]=st.steps[j]; st.steps[j]=tmp;
     } else return false;
-    peDrawChain(ed);
+    st.raw = "";
+    chainDraw(box, st);
+    return true;
+  }
+
+  // HOST 1 — the profile editor's gear row. The hidden [data-k="gearchain"] input carries the
+  // spelling, so everything downstream (peSyncGear, Save) still reads one string.
+  var PE_ST = chainNew();
+  function peDrawChain(ed){
+    var box=ed.querySelector(".peg-chainrow"); if(!box) return;
+    chainDraw(box, PE_ST);
+    peChainChanged(ed);
+  }
+  function peChainChanged(ed){
+    var hidden=ed.querySelector('[data-k="gearchain"]'); if(hidden) hidden.value = chainSpell(PE_ST);
+    peSyncGear(ed);
+  }
+
+  // HOST 2 — the Loadouts page. Each mode's "Objective (Advisor)" picker is bound to a string
+  // setting, and a chain is just a longer string, so the form writes that same setting. The picker
+  // shows "Custom chain…" for it, since a <select> cannot hold a value it has no option for.
+  var LO_CHAINS = Object.create(null);
+  function loChainBox(key){ return document.getElementById("lc-"+key); }
+  // What the picker MEANS, as opposed to what its <select> holds.
+  function loObjectiveValue(sel){
+    if(sel.value!==PE_CHAIN) return sel.value;
+    var st=LO_CHAINS[sel.getAttribute("data-setting")];
+    return st ? chainSpell(st) : "";
+  }
+  // Put a setting value on screen: a listed name in the picker, a chain in the rows under it.
+  function loShowObjective(sel, v){
+    var key=sel.getAttribute("data-setting"), box=loChainBox(key), custom=peIsChain(v);
+    sel.value = custom ? PE_CHAIN : v;
+    if(!box) return;
+    box.hidden = !custom;
+    if(!custom) return;
+    var st = LO_CHAINS[key] || (LO_CHAINS[key]=chainNew());
+    var fresh = !box.firstChild;
+    if(fresh) box.innerHTML = chainMarkup("lc-"+key);
+    // Redrawn only when the value really differs, so a snapshot never rebuilds rows under the pointer.
+    if(fresh || chainSpell(st)!==v){ chainLoad(st, v); chainDraw(box, st); }
+  }
+  function loSendObjective(sel, was){
+    var key=sel.getAttribute("data-setting"), now=loObjectiveValue(sel);
+    setPending("set:"+key, now, function(){ loShowObjective(sel, was); });
+    window.__ngu.send({cmd:"setSetting", key:key, value:now});
+    scheduleObjectiveFill(sel);   // auto-populate the mode's id list from the objective
+  }
+  // The picker itself changed. "Custom chain…" starts from the chain last built for this mode, or
+  // from one step taking every slot.
+  function loPickerChanged(sel){
+    var key=sel.getAttribute("data-setting"), pre=sel._preVal;
+    var was = pre===PE_CHAIN ? (LO_CHAINS[key] ? chainSpell(LO_CHAINS[key]) : "") : (pre===undefined ? "" : pre);
+    if(sel.value===PE_CHAIN){
+      var st = LO_CHAINS[key] || (LO_CHAINS[key]=chainNew());
+      if(!st.steps.length) chainLoad(st, "");
+      loShowObjective(sel, chainSpell(st));
+    } else loShowObjective(sel, sel.value);
+    loSendObjective(sel, was);
+  }
+  function loChainEvent(box, t, isClick){
+    var key=box.id.slice(3), st=LO_CHAINS[key], sel=document.getElementById("set-"+key);
+    if(!st || !sel) return false;
+    var was=chainSpell(st);
+    if(!chainEvent(box, st, t, isClick)) return false;
+    loSendObjective(sel, was);
+    return true;
+  }
+  // One dispatcher for both hosts, called from the page's change and click listeners.
+  function chainDispatch(t, isClick){
+    var box = t.closest ? t.closest(".cs-box") : null; if(!box) return false;
+    if(box.classList.contains("lo-chain")) return loChainEvent(box, t, isClick);
+    var ed=document.querySelector(".tl-editor"); if(!ed) return false;
+    if(!chainEvent(box, PE_ST, t, isClick)) return false;
+    peChainChanged(ed);
     return true;
   }
   function peSyncGear(ed){
@@ -5114,15 +5202,10 @@
             return '<option value="'+esc(n)+'"'+(n===g.objective?' selected':'')+'>'+esc(n)+'</option>'; }).join('')+
           '<option value="'+PE_CHAIN+'"'+(isChain?' selected':'')+'>Custom chain…</option>'+
           '</select>';
-        objField += '</div><div class="tle-row peg-chainrow"'+(isChain?'':' hidden')+'><label for="pegChain">Chain</label>'+
+        objField += '</div><div class="tle-row peg-chainrow cs-box"'+(isChain?'':' hidden')+'><label for="pegChain">Chain</label>'+
           '<span class="tle-wide"><input type="hidden" id="pegChain" data-k="gearchain" value="'+esc(isChain?g.objective:"")+'">'+
-          '<div class="listed" id="pegSteps"></div>'+
-          '<div class="le-add"><button class="btn" type="button" id="pegStepAdd">Add step</button>'+
-          '<label class="tle-time"><input type="checkbox" id="pegPin"> <span class="mut">hold your hardest-hitting weapon in the main hand</span></label></div>'+
-          '<div class="tle-hint mut">Steps run in order, at most '+PE_MAX_STEPS+'. Each takes its share of the accessory slots still free, '+
-          'and hands on what it does not fill. Weapons and armour go to the first step whose stats they carry.</div>'+
-          '<div class="peg-spell"></div></span>';
-        peLoadChain(g.objective);
+          chainMarkup("peg")+'</span>';
+        chainLoad(PE_ST, g.objective);
       } else {
         objField = '<input class="tle-wide" id="pegObj" data-k="gearobj" value="'+esc(g.objective)+'" placeholder="objective name — e.g. Time Machine">';
       }
@@ -6016,7 +6099,7 @@
       // "follow the profile timeline" for Main, which has no list of its own.
       var lead=sels[i].getAttribute("data-empty") || "Manual — use item list";
       var cur=sels[i].value;
-      sels[i].innerHTML='<option value="">'+esc(lead)+'</option>'+tail;
+      sels[i].innerHTML='<option value="">'+esc(lead)+'</option>'+tail+'<option value="'+PE_CHAIN+'">Custom chain…</option>';
       sels[i].value=cur;
     }
     _gearObjBuilt=true;
@@ -6344,7 +6427,7 @@
   }
   function scheduleObjectiveFill(sel){
     var listKey=sel.getAttribute && sel.getAttribute("data-fillfor");
-    if(!listKey || !sel.value) return;                     // "" = keep the manual list; never wipe it
+    if(!listKey || !loObjectiveValue(sel)) return;         // "" = keep the manual list; never wipe it
     // ONLY fill a list that is empty. Picking an objective must never destroy a hand-curated set of
     // ids: that list is what the mode falls back to when the objective is cleared again, or when the
     // optimizer returns nothing, and there is no undo and no confirmation on this path. A user who
@@ -6353,7 +6436,7 @@
     if(st && st.arr && st.arr.length) return;
     var m=(window.loadoutModes||[]).filter(function(x){ return x.key===listKey; })[0]; if(!m) return;
     clearTimeout(_fillTimers[listKey]);
-    _fillTimers[listKey]=setTimeout(function(){ sendObjectiveFill(listKey, sel.value, m.resp); }, 400);
+    _fillTimers[listKey]=setTimeout(function(){ sendObjectiveFill(listKey, loObjectiveValue(sel), m.resp); }, 400);
   }
   // A `local` list is not a setting — it belongs to the open breakpoint editor and saves with the
   // breakpoint, so it must never post setSettingList (which would write a setting key of null).
@@ -6399,7 +6482,10 @@
         for(var i=0;i<els.length;i++){
           var el = els[i];
           if(el.type === "checkbox") el.checked = !!v;
-          else if(document.activeElement !== el) el.value = v;   // don't clobber what the user is editing
+          else if(document.activeElement !== el){              // don't clobber what the user is editing
+            if(el.getAttribute("data-dyn")==="gearObjectives") loShowObjective(el, v == null ? "" : String(v));
+            else el.value = v;
+          }
         }
       });
     });
@@ -6640,8 +6726,8 @@
       } else if(t.id === "peCount"){
         // The digger activation count lives beside the list and serialises into the same payload.
         peSyncPayload();
-      } else if(t.matches && t.matches('[data-cstep],#pegPin')){
-        var ced=document.querySelector(".tl-editor"); if(ced) peChainEvent(ced, t, false);
+      } else if(t.matches && t.matches('[data-cstep],.cs-pin')){
+        chainDispatch(t, false);
       } else if(t.matches && t.matches('[data-k="gearobj"],[data-k="gearresp"]')){
         // Gear Lock: the objective and the respawn switch serialise into the same payload as the
         // locked-item list. Deliberately NOT [data-setting] — this is breakpoint content that saves
@@ -6657,7 +6743,9 @@
           for(var ti=0;ti<twins.length;ti++) twins[ti].checked = nowC;
           setPending("set:"+skey, nowC, function(){ for(var i=0;i<twins.length;i++) twins[i].checked = wasC; });
           window.__ngu.send({cmd:"setSetting", key:skey, value:nowC});
-        } else if(t.hasAttribute("data-str")){   // string-valued select (e.g. loadout objective; "" = manual)
+        } else if(t.getAttribute("data-dyn")==="gearObjectives"){
+          loPickerChanged(t);   // a loadout objective: a listed name, or the chain built under it
+        } else if(t.hasAttribute("data-str")){   // string-valued select ("" = manual)
           var wasS=t._preVal, nowS=t.value;
           for(var tj=0;tj<twins.length;tj++) if(twins[tj]!==t) twins[tj].value = nowS;
           setPending("set:"+skey, nowS, function(){ if(wasS!==undefined) for(var i=0;i<twins.length;i++) twins[i].value = wasS; });
@@ -6877,9 +6965,8 @@
       }
       // Gear Lock: add an item ID to the breakpoint's list. Local to the editor, like the slot picker
       // above — it saves with the breakpoint, not as a setting (see listSend's `local` branch).
-      if(e.target && e.target.matches && e.target.matches("#pegStepAdd,[data-cstepmove],[data-cstepremove]")){
-        var ced=document.querySelector(".tl-editor");
-        if(ced && peChainEvent(ced, e.target, true)) return;
+      if(e.target && e.target.matches && e.target.matches(".cs-add,[data-cstepmove],[data-cstepremove]")){
+        if(chainDispatch(e.target, true)) return;
       }
       if(e.target && e.target.id === "peLocksAddBtn"){
         var idIn=$("peLocksAdd");
@@ -6903,7 +6990,7 @@
           if(window.showToast) window.showToast("Pick an objective for this loadout first.");
           return;
         }
-        sendObjectiveFill(fk, fsel.value, fm.resp);
+        sendObjectiveFill(fk, loObjectiveValue(fsel), fm.resp);
         var fo=fillBtn.textContent; fillBtn.disabled=true; fillBtn.textContent="Optimizing…";
         setTimeout(function(){ fillBtn.textContent=fo; fillBtn.disabled=false; }, 1200);
         return;
