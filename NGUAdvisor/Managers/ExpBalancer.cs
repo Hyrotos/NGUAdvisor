@@ -259,10 +259,6 @@ namespace NGUAdvisor.Managers
                 var c = Main.Character;
                 if (c == null || c.highestBoss < 17) return null;   // custom purchases: permanent unlock
                 WriteCustomPlan(c);
-                double budgetD = c.realExp * fraction;
-                if (budgetD > long.MaxValue) budgetD = long.MaxValue;
-                long budget = (long)budgetD;
-                if (budget < 100) return null;
 
                 var stats = Snapshot(c);
                 var elig = new List<Stat>();
@@ -271,6 +267,28 @@ namespace NGUAdvisor.Managers
                 if (elig.Count == 0) return null;
 
                 elig.Sort((a, b) => Level(a).CompareTo(Level(b)));   // ascending by level
+
+                // Budget is `fraction` of the bank, but never a DEAD ZONE. The old flat "under 100 EXP,
+                // skip" floor made small banks permanently unspendable: 510 EXP x 10% = 51, so the tick
+                // bought nothing, every minute -- and because nothing was ever spent, a bank that only
+                // trickles in sat there untouched (user-reported 2026-10-09). Waiting buys nothing (a
+                // purchase is an instant, permanent stat), so the floor is one unit, clamped to the bank.
+                //
+                // One unit of a stat that is BEHIND, though, not simply the cheapest unit on offer: cap
+                // costs 1 EXP, so a cheapest-unit floor would drip every small bank into cap forever,
+                // however far ahead cap already is, and never save up the 150 a point of power costs.
+                var behind = Behind(elig);
+                double cheapest = double.MaxValue;
+                foreach (var s in behind)
+                {
+                    double u = UnitCost(s.Name);
+                    if (u < cheapest) cheapest = u;
+                }
+                double budgetD = Math.Max(c.realExp * fraction, cheapest);
+                if (budgetD > c.realExp) budgetD = c.realExp;
+                if (budgetD > long.MaxValue) budgetD = long.MaxValue;
+                long budget = (long)budgetD;
+                if (budget < cheapest) return null;   // cannot afford one unit of anything that is behind yet
 
                 // Waterfill: raise the floor across the lowest levels until the budget runs out.
                 double remaining = budget;
@@ -305,6 +323,19 @@ namespace NGUAdvisor.Managers
                     long spent = BuyStat(c, s.Name, amt);
                     if (spent > 0) { total += spent; fed.Add(s.Name); }
                 }
+                if (total <= 0)
+                {
+                    // The waterfill can slice a small budget into per-stat crumbs that each round down
+                    // to zero units (150 EXP for one Energy POWER, split three ways, buys none). Rather
+                    // than buy nothing, put the whole budget on the most-lagging stat it can afford a
+                    // unit of -- still a step toward the ratio, just one stat at a time.
+                    foreach (var s in behind)
+                    {
+                        if (UnitCost(s.Name) > budget) continue;
+                        long spent = BuyStat(c, s.Name, budget);
+                        if (spent > 0) { total = spent; fed.Add(s.Name); break; }
+                    }
+                }
                 if (total <= 0) return null;
                 return $"{string.Join(", ", fed.ToArray())} for {Fmt(total)} EXP (walking toward ratio)";
             }
@@ -312,6 +343,34 @@ namespace NGUAdvisor.Managers
         }
 
         // Replicates the game's buyCustom* math for one stat, spending at most maxExp. Returns EXP spent.
+        // The stats still below the leader, most-behind first (`elig` is sorted ascending by level).
+        // When everything is level -- an exactly balanced account -- every stat counts as behind,
+        // so a balanced bank is still spent rather than held.
+        private static List<Stat> Behind(List<Stat> elig)
+        {
+            double top = double.MinValue;
+            foreach (var s in elig) top = Math.Max(top, Level(s));
+            var behind = new List<Stat>();
+            foreach (var s in elig)
+                if (Level(s) < top * (1 - 1e-9)) behind.Add(s);
+            return behind.Count > 0 ? behind : elig;
+        }
+
+        // What one purchasable unit of a stat costs, in EXP -- the same constants BuyStat divides by.
+        private static double UnitCost(string name)
+        {
+            switch (name)
+            {
+                case "Energy POWER": return 150;
+                case "Energy CAP": return 1;
+                case "Energy BARS": return 80;
+                case "Magic POWER": return 450;
+                case "Magic CAP": return 3;
+                case "Magic BARS": return 240;
+            }
+            return double.MaxValue;
+        }
+
         private static long BuyStat(Character c, string name, long maxExp)
         {
             if (maxExp < 1) return 0;
