@@ -1244,7 +1244,7 @@ namespace NGUAdvisor.Managers
                 case "TM HOUR":
                     // The guide's hour-0 shape (24hr profiles): cap the cheap BTs, fund TM, wandoos,
                     // rest to augs. NO AT here (user-reported: CAPALLAT was draining the TM hour) —
-                    // AT has its own hour, and BT energy persists once capped.
+                    // AT has its own hour.
                     if (e) list.Add("CAPALLBT");
                     list.Add("CAPTM:30");
                     list.Add("CAPWAN:40");
@@ -1259,13 +1259,19 @@ namespace NGUAdvisor.Managers
                     foreach (var t in ngus) if (!list.Contains(t)) list.Add(t);
                     break;
                 case "AT HOUR":
-                    if (e) { list.Add("CAPALLAT"); list.Add("CAPWAN:40"); list.Add("BESTAUG"); }
+                    // CAPALLBT leads here and in the marathon below, as it already does in every
+                    // other energy list. BT caps are fixed within a run (they only shrink at rebirth),
+                    // but tiers unlock mid-run (previous tier at 5000 x id) and a short hour-0 pool
+                    // leaves partial caps -- so a segment without the token never tops either up, and
+                    // a run that STARTS in one trains nothing at all (user-reported 2026-10-09).
+                    if (e) { list.Add("CAPALLBT"); list.Add("CAPALLAT"); list.Add("CAPWAN:40"); list.Add("BESTAUG"); }
                     else { list.Add("CAPTM:5"); list.Add("CAPWAN:40"); }
                     foreach (var t in ngus) if (!list.Contains(t)) list.Add(t);
                     break;
                 default:
                     // NGU MARATHON — hot NGU lanes get their full equal shares (the old plain
                     // BESTAUG/CAPALLAT here stole equal shares from them; augs/AT have their hours).
+                    if (e) list.Add("CAPALLBT");   // see AT HOUR: saturated slots drop out, so this costs the NGUs nothing
                     list.Add("CAPTM:5");
                     list.Add("CAPWAN:60");
                     foreach (var t in ngus) if (!list.Contains(t)) list.Add(t);
