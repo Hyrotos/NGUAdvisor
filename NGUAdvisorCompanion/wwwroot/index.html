@@ -912,6 +912,9 @@
   .scrim.open { opacity: 1; pointer-events: auto; }
   /* transient action-result toast (e.g. Re-optimize gear now) */
   .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(16px); background: var(--surface-2, var(--surface)); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 9px; padding: 11px 16px; font-size: var(--fs-4); line-height: 1.35; color: var(--text); box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 90; max-width: min(560px, 88vw); }
+  /* A file path has no spaces to break at, so without this it runs straight out of the box. The
+     toast is anchored by its BOTTOM edge, so wrapping grows it upward and nothing below moves. */
+  .toast { overflow-wrap: anywhere; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   /* A toast that offers something to copy is the one toast that takes the pointer. */
   .toast.copyable.show { pointer-events: auto; cursor: pointer; }
