@@ -59,6 +59,48 @@ setTimeout(() => {
   send({ instruments: { titan: { known: true, name: "T7 v2", atk: 137, def: 12 } }, goal: {} });
   ok("older advisor without the keys says nothing", !/parked/.test($("g1val").textContent), $("g1val").textContent);
 
+  // A notice that carries something to copy: the toast says so, takes the click, copies, and says
+  // what happened. An ordinary notice still ignores the pointer. jsdom has no async clipboard, so
+  // this exercises the execCommand fallback, which is synchronous.
+  {
+    const toast = $("toast");
+    let copied = null, refuse = false;
+    window.document.execCommand = cmd => {
+      if (cmd !== "copy" || refuse) return false;
+      const ta = window.document.querySelector("textarea[readonly]");
+      copied = ta ? ta.value : null;
+      return true;
+    };
+    const click = () => toast.dispatchEvent(new window.Event("click", { bubbles: true }));
+
+    send({ notice: "Re-optimized.", goal: {} });
+    ok("an ordinary notice is not clickable", !toast.classList.contains("copyable") && !/Click to copy/.test(toast.textContent), toast.textContent);
+    click();
+    ok("clicking an ordinary notice copies nothing", copied === null && toast.textContent === "Re-optimized.", toast.textContent);
+
+    const path = "/home/u/pfx/drive_c/x/state-export.txt";
+    send({ notice: "Game state exported to " + path, noticeCopy: path, goal: {} });
+    ok("a notice with a path offers the copy", toast.classList.contains("copyable") && /Click to copy the path/.test(toast.textContent), toast.textContent);
+    ok("and still shows the message", toast.textContent.indexOf("Game state exported to " + path) === 0, toast.textContent);
+    click();
+    ok("clicking it copies exactly the path", copied === path, String(copied));
+    ok("and says so", toast.textContent === "Path copied to the clipboard." && !toast.classList.contains("copyable"), toast.textContent);
+    ok("the helper textarea is cleaned up", !window.document.querySelector("textarea[readonly]"));
+    copied = null; click();
+    ok("the confirmation is not itself clickable", copied === null);
+
+    refuse = true;
+    send({ notice: "Game state exported to /p/state-export.txt", noticeCopy: "/p/state-export.txt", goal: {} });
+    click();
+    ok("a refused clipboard is reported with the path, not swallowed",
+       toast.textContent === "Couldn't reach the clipboard — the path is /p/state-export.txt", toast.textContent);
+
+    // The copy offer belongs to ITS notice: the next plain one must not inherit it.
+    send({ notice: "Game state exported to /p/a.txt", noticeCopy: "/p/a.txt", goal: {} });
+    send({ notice: "Something else.", goal: {} });
+    ok("a later plain notice does not inherit the copy offer", !toast.classList.contains("copyable"));
+  }
+
   // The Titans view's heading and verdict name the rung the bars are measured against. They used to
   // say "Autokill unlocks at 100%" under bars scaled to the manual first-kill stats.
   send({ instruments: { titan: { known: true, name: "T2 v1", stage: "first kill", atk: 72, def: 34 } }, goal: {} });

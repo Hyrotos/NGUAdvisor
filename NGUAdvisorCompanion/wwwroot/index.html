@@ -913,6 +913,10 @@
   /* transient action-result toast (e.g. Re-optimize gear now) */
   .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(16px); background: var(--surface-2, var(--surface)); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 9px; padding: 11px 16px; font-size: var(--fs-4); line-height: 1.35; color: var(--text); box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 90; max-width: min(560px, 88vw); }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  /* A toast that offers something to copy is the one toast that takes the pointer. */
+  .toast.copyable.show { pointer-events: auto; cursor: pointer; }
+  .toast.copyable.show:hover { border-color: var(--accent); }
+  .toast .toast-hint { display: block; margin-top: 4px; font-size: var(--fs-2); color: var(--muted); }
   @media (prefers-reduced-motion: reduce) { .toast { transition: opacity .2s; transform: translateX(-50%); } }
 
   @media (max-width: 900px) {
@@ -6557,15 +6561,55 @@
   };
 
   // transient action-result toast; window-scoped so the [data-action] handler (a separate IIFE) can also fire it.
-  window.showToast = function(msg){
+  // `copy` (optional) is text the toast offers to put on the clipboard when clicked — the path of a
+  // file the advisor just wrote. Such a toast stays up longer, since it is asking to be acted on, and
+  // says what the click does; an ordinary toast is unchanged and still ignores the pointer.
+  window.showToast = function(msg, copy){
     var t=document.getElementById("toast"); if(!t || !msg) return;
-    t.textContent = msg; t.classList.add("show");
-    clearTimeout(t._h); t._h = setTimeout(function(){ t.classList.remove("show"); }, 4600);
+    t.textContent = msg;
+    t._copy = copy || null;
+    t.classList.toggle("copyable", !!copy);
+    if(copy){
+      var hint=document.createElement("span");
+      hint.className="toast-hint"; hint.textContent="Click to copy the path";
+      t.appendChild(hint);
+    }
+    t.classList.add("show");
+    clearTimeout(t._h); t._h = setTimeout(function(){ t.classList.remove("show"); }, copy ? 12000 : 4600);
   };
+  // The async clipboard API first; WebView2 can refuse it (no user-activation carry-over, or a
+  // policy), so a hidden textarea + execCommand is the fallback. Reports what actually happened.
+  function copyText(text, done){
+    var fallback=function(){
+      var ok=false;
+      try{
+        var ta=document.createElement("textarea");
+        ta.value=text; ta.setAttribute("readonly",""); ta.style.position="fixed"; ta.style.opacity="0";
+        document.body.appendChild(ta); ta.select();
+        ok=document.execCommand("copy");
+        document.body.removeChild(ta);
+      }catch(e){ ok=false; }
+      done(ok);
+    };
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText)
+        navigator.clipboard.writeText(text).then(function(){ done(true); }, fallback);
+      else fallback();
+    }catch(e){ fallback(); }
+  }
+  document.addEventListener("click", function(e){
+    var t=document.getElementById("toast");
+    if(!t || !t._copy || !e.target || !t.contains(e.target)) return;
+    var text=t._copy;
+    copyText(text, function(ok){
+      // An ordinary toast again: nothing left to click, and it fades on the normal timer.
+      window.showToast(ok ? "Path copied to the clipboard." : "Couldn't reach the clipboard — the path is "+text);
+    });
+  });
 
   function applySnapshot(s){
     if(!s || typeof s!=="object") return;
-    if(s.notice) window.showToast(s.notice);   // one-shot outcome of a button action (advisor emits once, then clears)
+    if(s.notice) window.showToast(s.notice, s.noticeCopy);   // one-shot outcome of a button action (advisor emits once, then clears)
     // A1: the pipe's own state can only ever force `down` (immediately — no watchdog wait) or re-arm
     // the wait for a first snapshot. It can NOT declare us live: that's what snapshot arrivals do.
     if(s.type==="status"){

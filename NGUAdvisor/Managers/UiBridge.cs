@@ -365,6 +365,9 @@ namespace NGUAdvisor.Managers
         // One-shot outbound notice (e.g. the result of a button action): set on the main thread by a
         // command, emitted in the NEXT snapshot as root["notice"], then cleared. Companion shows a toast.
         private static string _notice;
+        // Text the notice offers to COPY when it is clicked -- a file path, so far. Rides with the
+        // notice it belongs to and is cleared with it, so it can never attach to a later one.
+        private static string _noticeCopy;
 
         // ---- doAction registry: fire-and-forget UI actions (buttons), not settings. Each maps to a
         //      safe, existing main-thread entry point — mirrors what the WinForms buttons already do.
@@ -396,6 +399,7 @@ namespace NGUAdvisor.Managers
                 string path = StateExport.Write();
                 _notice = path != null ? "Game state exported to " + path
                                        : "The state export failed — check the Debug log.";
+                _noticeCopy = path;
             };
             // "Locate" on the Walderp chip — jumps the GAME to the menu he is hiding in. Strictly
             // player-initiated: never fired on a timer, and it does NOT click him. He relocates every 180s,
@@ -1864,7 +1868,14 @@ namespace NGUAdvisor.Managers
 
             // --- one-shot notice: outcome of the last button action (e.g. Re-optimize gear now). Emit once
             //     then clear so the companion toasts it exactly once. Same thread as the command drain. ---
-            Safe("notice", () => { if (!string.IsNullOrEmpty(_notice)) { root["notice"] = _notice; _notice = null; } });
+            Safe("notice", () =>
+            {
+                if (string.IsNullOrEmpty(_notice)) { _noticeCopy = null; return; }
+                root["notice"] = _notice;
+                if (!string.IsNullOrEmpty(_noticeCopy)) root["noticeCopy"] = _noticeCopy;
+                _notice = null;
+                _noticeCopy = null;
+            });
 
             // --- EXP page: base Energy:Magic value ratio + the balancer's on-ratio verdict. The on/off
             //     status is the balancer's 6-stat waterfill (NOT the E:M ratio) so it matches the advisor. ---
