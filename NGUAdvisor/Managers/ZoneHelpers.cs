@@ -256,6 +256,11 @@ namespace NGUAdvisor.Managers
 
         public static bool AutokillAvailable(int titanIndex) => AutokillAvailable(titanIndex, TitanVersion(titanIndex));
 
+        // Does a swap into loot gear pay for this titan? An auto-killed titan dies in whatever is
+        // worn, so the only reason to spend a gear swap on one is its drop table: some roll still
+        // carries a wanted item AND the worn gear does not already cap it.
+        public static bool TitanDropChancePays(int titanIndex) => BoostFarmAdvisor.TitanGearLootFor(titanIndex).Pays;
+
         // Titans 6-9 (indices 5-8) sit behind a clue riddle the player solves by hand. Until it's solved
         // AdventureController.spawnEnemy serves an ordinary mob for the zone instead of the titan, so the titan
         // cannot be fought at all -- autokill stats are beside the point. Deliberately SEPARATE from

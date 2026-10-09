@@ -133,6 +133,8 @@ namespace NGUAdvisor.Managers
             bool realFight = false;
             int requiredAcc = 0;
             int realIndex = -1;
+            // The most any spawning target still needs from drop chance; not Known = it buys nothing.
+            var lootNeed = new BoostFarmAdvisor.GearLootNeed();
             try
             {
                 var targets = Main.Settings.TitanSwapTargets;
@@ -140,6 +142,8 @@ namespace NGUAdvisor.Managers
                 {
                     if (targets == null || i >= targets.Length || !targets[i]) continue;
                     if (!ZoneHelpers.TitanSpawningSoon(i)) continue;
+                    var need = BoostFarmAdvisor.TitanGearLootFor(i);
+                    if (need.Known && (!lootNeed.Known || need.Target > lootNeed.Target)) lootNeed = need;
                     if (!ZoneHelpers.AutokillAvailable(i))
                     {
                         realFight = true;
@@ -243,12 +247,75 @@ namespace NGUAdvisor.Managers
                                  "grows stronger every insult. Level it to stop the growth entirely.");
                 }
             }
-            else if (string.IsNullOrEmpty(obj) && (fallback == null || fallback.Length == 0))
-                obj = "Adventure";
+            else
+            {
+                var lootSet = AutokillLootSet(obj, fallback, lootNeed);
+                if (lootSet != null) return lootSet;
+                if (string.IsNullOrEmpty(obj) && (fallback == null || fallback.Length == 0))
+                    obj = "Adventure";
+            }
             // The mechanic item is a GEAR LOCK — the general form of the old `requireAccessoryId`
             // parameter — marked Required so it keeps beating the respawn pin exactly as it did before.
             return ResolveModeGear(obj, Main.Settings.TitanObjectiveRespawn, fallback,
                                    GearLockSet.RequiredItem(requiredAcc));
+        }
+
+        // GEAR FOR A TITAN THAT AUTO-KILLS: the loot stat belongs in the ACCESSORIES, not in the set.
+        //
+        // The autokill thresholds are live attack/defense reads, so a set that spends Power and
+        // Toughness on loot can turn an auto-kill into a real fight in loot gear. Adventure therefore
+        // owns weapons and armour (with the top-Power weapon held), and only accessories go to loot.
+        //
+        // Drop Chance is SIZED, not maximised. A titan roll is min(chance x dropChance, cap), so past
+        // the point where every wanted roll caps, more of it buys nothing: the budget is walked down
+        // while the set still reaches that point, and the slots handed back go to Adventure.
+        //
+        // Applies when the titan objective is a plain loot stat, or is unset with no item list --
+        // then Drop Chance is used if (and only if) it still pays, which is the reason the advisor
+        // attends an auto-killed titan at all. A chain, "Adventure" or an item list is left alone:
+        // the user wrote those. Null = not handled here.
+        private static int[] AutokillLootSet(string titanObjective, int[] fallback, BoostFarmAdvisor.GearLootNeed lootNeed)
+        {
+            try
+            {
+                string loot = titanObjective;
+                if (string.IsNullOrEmpty(loot))
+                {
+                    if ((fallback != null && fallback.Length > 0) || !lootNeed.Pays) return null;
+                    loot = GearObjectives.Stat.DropChance;
+                }
+                var lootObj = GearChain.FindObjective(loot);
+                if (lootObj == null || string.Equals(lootObj.Name, "Adventure", StringComparison.OrdinalIgnoreCase)) return null;
+
+                bool respawn = Main.Settings.TitanObjectiveRespawn;
+                GearSolver.Result Run(string budget) => Optimize(
+                    FindObjective($"Adventure(0)+PowerWeapon > {lootObj.Name}({budget}) > Adventure(all)"), respawn);
+
+                var best = Run("all");
+                if (best == null) return null;
+                string sized = "every accessory";
+                bool isDropChance = string.Equals(lootObj.Name, GearObjectives.Stat.DropChance, StringComparison.OrdinalIgnoreCase);
+                // StepScores[1] is the loot step's objective over the whole set -- for Drop Chance,
+                // the game's own gear factor, the same quantity lootNeed.Target is stated in.
+                if (isDropChance && lootNeed.Known && best.StepScores.Length > 1 && best.StepScores[1] >= lootNeed.Target)
+                {
+                    int full = best.Accessories.Count;
+                    for (int slots = full - 1; slots >= 0; slots--)
+                    {
+                        var run = Run(slots.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        if (run == null || run.StepScores.Length < 2 || run.StepScores[1] < lootNeed.Target) break;
+                        best = run;
+                        sized = $"{slots} of {full} accessories, which already caps every wanted drop";
+                    }
+                }
+
+                var ids = best.AllIds().Where(x => x > 0).Distinct().ToArray();
+                if (ids.Length == 0) return null;
+                Main.Log($"Titan auto-kills — '{lootObj.Name}' on {sized}; weapons and armour stay on Adventure"
+                       + $"{(respawn ? " (+top respawn)" : "")}: {ids.Length} items.");
+                return ids;
+            }
+            catch (Exception e) { Main.LogDebug($"Titan auto-kill loot set: {e.Message}"); return null; }
         }
 
         // Gold gear resolution with a data-driven default: when the user configured NEITHER a gold

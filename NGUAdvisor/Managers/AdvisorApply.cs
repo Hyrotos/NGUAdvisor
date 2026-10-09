@@ -685,6 +685,7 @@ namespace NGUAdvisor.Managers
 
                 int maxZone = ZoneHelpers.GetMaxReachableZone(true);
                 var targets = new bool[14];
+                var heldTargets = Main.Settings.TitanSwapTargets;
                 for (int i = 0; i < ZoneHelpers.TitanZones.Length && i < 14; i++)
                 {
                     if (ZoneHelpers.TitanZones[i] > maxZone) continue;
@@ -693,7 +694,26 @@ namespace NGUAdvisor.Managers
                     if (ZoneHelpers.RiddleLocked(i)) continue;
                     bool ak = false;
                     try { ak = ZoneHelpers.AutokillAvailable(i); } catch { }
-                    if (ak) continue;
+                    if (ak)
+                    {
+                        // AN AUTO-KILLED TITAN DIES IN WHATEVER IS WORN, so the only reason to attend
+                        // one is its drop table: a wanted item behind a roll the worn gear does not
+                        // already cap. Otherwise no swap pays, and it stays out of the queue as before.
+                        //
+                        // Held while the titan lock is on. The test reads the WORN drop chance, and
+                        // under the lock that is the loot set this very decision equipped -- which
+                        // caps the roll, reads as "no longer pays", releases the lock and restores
+                        // the old gear a minute before the kill. The answer is only re-asked once
+                        // the lock is off and the normal set is back on.
+                        try
+                        {
+                            targets[i] = LockManager.HasTitanLock()
+                                ? (heldTargets != null && i < heldTargets.Length && heldTargets[i])
+                                : ZoneHelpers.TitanDropChancePays(i);
+                        }
+                        catch { }
+                        continue;
+                    }
                     // The objective answers for itself: the chase decision above, applied just below.
                     // Every OTHER below-AK titan is queued only if the best projected kill set clears
                     // its MANUAL requirement (not the staged one — see TitanTables.ManualFightReady).
@@ -719,7 +739,7 @@ namespace NGUAdvisor.Managers
                     for (int i = 0; i < targets.Length; i++)
                         if (targets[i])
                             names.Add(ZoneHelpers.ZoneList.TryGetValue(ZoneHelpers.TitanZones[i], out var n) ? n : $"Titan {i + 1}");
-                    Main.Log($"Advisor: titan targets -> {(names.Count > 0 ? string.Join(", ", names.ToArray()) : "(none — no fight-ready titan below auto-kill)")}");
+                    Main.Log($"Advisor: titan targets -> {(names.Count > 0 ? string.Join(", ", names.ToArray()) : "(none — no fight-ready titan, and no auto-killed one with drops worth gear)")}");
                 }
 
                 // The advisor owns titan killing: the kill-gear swap master must be on or the

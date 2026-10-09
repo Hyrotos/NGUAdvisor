@@ -226,5 +226,47 @@ namespace NGUAdvisor.Managers
             }
             catch (Exception e) { Main.LogDebug($"BoostFarmAdvisor: {e.Message}"); return v; }
         }
+
+        // HOW MUCH OF A DROP-CHANCE SATURATION POINT THE GEAR HAS TO CARRY.
+        //
+        // Game truth (decompiled Character.lootFactor): every drop-chance source multiplies, and the
+        // gear's whole contribution is ONE of those factors. GearScorer reproduces exactly that term:
+        // the "Drop Chance" objective is a single base-100 stat, so its score IS the game's gear
+        // factor. Hence lootFactor = nonGear x gear, and the gear factor a roll needs is
+        // neededLootFactor / (liveLootFactor / liveGearFactor).
+        public struct GearLootNeed
+        {
+            public bool Known;
+            public double Target;    // gear factor at which every wanted roll caps
+            public double Current;   // what the worn gear supplies right now
+            public bool Pays => Known && Target > Current;
+        }
+
+        // For a titan kill: the rolls that still carry a wanted item (version and game gates applied).
+        // Not Known when drop chance buys nothing from this titan. A rooted titan compares against
+        // lootFactor^(1/3), so its need is cubed back into the raw lootFactor domain first.
+        public static GearLootNeed TitanGearLootFor(int titanIndex)
+        {
+            var need = new GearLootNeed();
+            try
+            {
+                double factor = GearFarmAdvisor.WantedTitanNeedFactor(titanIndex);
+                if (factor <= 0) return need;
+                double neededLoot = TitanDropTables.Rooted(titanIndex) ? Math.Pow(factor, 3.0) : factor;
+
+                var c = Main.Character;
+                var dropChance = GearOptimizer.FindObjective(GearObjectives.Stat.DropChance);
+                if (c == null || dropChance == null) return need;
+                double gearNow = GearOptimizer.CurrentScore(dropChance);
+                double live = c.lootFactor();
+                if (gearNow <= 0 || live <= 0) return need;
+
+                need.Target = neededLoot / (live / gearNow);
+                need.Current = gearNow;
+                need.Known = true;
+            }
+            catch (Exception e) { Main.LogDebug($"BoostFarmAdvisor.TitanGearLootFor({titanIndex}): {e.Message}"); }
+            return need;
+        }
     }
 }

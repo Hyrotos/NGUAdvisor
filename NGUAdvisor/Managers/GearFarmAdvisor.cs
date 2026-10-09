@@ -395,6 +395,47 @@ namespace NGUAdvisor.Managers
             public string Text;
         }
 
+        // Is this item still worth a drop? Equipment only (a titan's table also carries boosts),
+        // not already maxxed, and not loot-filtered -- a filtered item never drops, so it can never
+        // be the reason to spend a gear swap.
+        private static bool StillWanted(int id, ItemList il)
+        {
+            if (!IsEquipment(id)) return false;
+            if (id >= il.itemMaxxed.Count || il.itemMaxxed[id]) return false;
+            bool filtered = false;
+            try { filtered = id < il.itemFiltered.Count && il.itemFiltered[id]; } catch { }
+            return !filtered;
+        }
+
+        // The drop-chance factor at which every titan roll that still carries a wanted item hits its
+        // cap, for the version that will spawn and with the game's own gates applied. In the titan's
+        // own domain (TitanDropTables.Rooted). 0 = drop chance buys nothing from this titan.
+        public static double WantedTitanNeedFactor(int titanIndex)
+        {
+            try
+            {
+                var c = Main.Character;
+                var il = c.inventory.itemList;
+                int version = ZoneHelpers.TitanVersion(titanIndex);
+                return TitanDropTables.NeedFactor(titanIndex, version,
+                    r => TitanGateOpen(r.Gate, c) && r.Items.Any(id => StillWanted(id, il)));
+            }
+            catch (Exception e) { Main.LogDebug($"GearFarmAdvisor.WantedTitanNeedFactor({titanIndex}): {e.Message}"); }
+            return 0;
+        }
+
+        private static bool TitanGateOpen(TitanDropTables.TitanGate gate, Character c)
+        {
+            switch (gate)
+            {
+                case TitanDropTables.TitanGate.UugRing: return c.inventory.itemList.uugRingComplete;
+                case TitanDropTables.TitanGate.Waldo: return c.inventory.itemList.waldoComplete;
+                case TitanDropTables.TitanGate.AntiWaldo: return c.inventory.itemList.antiWaldoComplete;
+                case TitanDropTables.TitanGate.Titan9Special: return c.adventure.titan9SpecialReward;
+                default: return true;
+            }
+        }
+
         private static bool IsEquipment(int id)
         {
             try { return id >= 0 && id <= Consts.MAX_GEAR_ID && (int)Main.Character.itemInfo.type[id] <= 5; }
