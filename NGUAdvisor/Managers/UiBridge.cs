@@ -1747,6 +1747,9 @@ namespace NGUAdvisor.Managers
                             t["hasIndex"] = bt.HasIndex;
                             t["max"] = bt.IndexMax;
                             var names = EditorCatalog.IndexNames(kind, bt.Code);
+                            // BR's number is NOT a ritual: it is a time limit in seconds (rituals
+                            // that would take longer than this are skipped), and it may be left out.
+                            if (bt.Code == "BR") { t["unit"] = "s"; t["blank"] = "no limit"; }
                             if (names != null)
                             {
                                 var n = new JSONArray();

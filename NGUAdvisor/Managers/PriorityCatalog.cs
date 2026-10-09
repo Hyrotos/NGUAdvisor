@@ -45,7 +45,9 @@ namespace NGUAdvisor.Managers
             new BaseType("ALLNGU",  false, 0, "All NGUs"),
             new BaseType("WAN",     false, 0, "Wandoos (magic)"),
             new BaseType("TM",      false, 0, "Time Machine (magic)"),
-            new BaseType("RIT",     true, 40, "Ritual (by number)"),
+            // The game has eight blood rituals, 0-7 (EditorCatalog names them). This said 40, which
+            // let the editor accept RIT-8 and up -- tokens the advisor can never seat.
+            new BaseType("RIT",     true, 7,  "Ritual (by number)"),
             // -index is SECONDS, not minutes: BR.CastRituals(secondsToRun) skips any ritual whose time
             // left exceeds it, and the README's example is BR-3600 = "ends before the 1 hour mark".
             // The editor advertised minutes with a 1440 max, so BR-30 read as half an hour when it is

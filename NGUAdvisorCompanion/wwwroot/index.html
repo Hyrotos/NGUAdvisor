@@ -1146,7 +1146,8 @@
   .pr-row { flex-wrap: wrap; }
   .pr-row .pr-type { flex: 2 1 190px; min-width: 0; width: auto; }
   .pr-row select.pr-idx { flex: 1 1 150px; min-width: 0; width: auto; }
-  .pr-row input.pr-idx { width: 84px; }
+  .pr-row .pr-num { flex: 1 1 150px; display: inline-flex; align-items: center; gap: 4px; }
+  .pr-row .pr-num .tin { width: 92px; }
   .pr-row span.pr-idx { flex: 1 1 150px; text-align: center; }
   .pr-row .tin { width: 64px; }
   .pr-row .pr-opt { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-3); color: var(--muted); white-space: nowrap; }
@@ -5267,10 +5268,15 @@
         if(ty && ty.hasIndex && ty.names){
           body+='<select class="inp tle-sel pr-idx" data-pr="idx" aria-label="Row '+(i+1)+' which one">'+
             (r.idx==="" ? '<option value="" selected>(none)</option>' : '')+
+            // A number the profile already carries but the list has no name for is still shown.
+            (r.idx!=="" && +r.idx>=ty.names.length ? '<option value="'+esc(r.idx)+'" selected>'+esc(r.idx)+' — (no name)</option>' : '')+
             ty.names.map(function(nm, k){
               return '<option value="'+k+'"'+(String(k)===r.idx?' selected':'')+'>'+k+' — '+esc(nm)+'</option>'; }).join("")+'</select>';
         } else if(ty && ty.hasIndex){
-          body+='<input class="inp tin pr-idx" data-pr="idx" type="number" min="0" max="'+ty.max+'" placeholder="—" value="'+esc(r.idx)+'" aria-label="Row '+(i+1)+' number">';
+          // A plain number, with its unit and what leaving it empty means when the advisor says so
+          // (BR: a time limit in seconds, optional).
+          body+='<span class="pr-idx pr-num"><input class="inp tin" data-pr="idx" type="number" min="0" max="'+ty.max+'" placeholder="'+esc(ty.blank||"—")+'" value="'+esc(r.idx)+'" aria-label="Row '+(i+1)+' '+(ty.unit==="s"?"time limit in seconds":"number")+'">'+
+                (ty.unit ? '<span class="mut">'+esc(ty.unit)+'</span>' : '')+'</span>';
         } else {
           body+='<span class="pr-idx mut" aria-hidden="true">—</span>';
         }

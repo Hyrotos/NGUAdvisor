@@ -22,8 +22,17 @@ namespace NGUAdvisor.Managers
             "Energy Buster", "Advanced Exoskeleton", "Laser Sword"
         };
 
+        // The eight blood rituals in the game's order. The game's own table numbers them from 1;
+        // the token index is that number minus one, so RIT-0 is the Tack. (Names as the game's
+        // ritual list shows them; the last is unlocked by Troll Challenge 6.)
+        private static readonly string[] Rituals =
+        {
+            "Poke Yourself with a Tack", "Fifty Papercuts", "A Big-Ass Hickey", "Eat a bowl of Barbed Wire",
+            "Grand Theft Blood Bank", "Self Decapitation", "Hug a Woodchipper", "Turn Yourself Inside Out"
+        };
+
         // The names of a token type's indexes, in index order, or null when the index is a plain
-        // number with no name behind it (a ritual number, a time limit in seconds).
+        // number with no name behind it (BR's time limit in seconds).
         //
         // AUG runs over a FLAT 0-13: even is an augment, odd is that augment's upgrade. That pairing
         // is the single most misread thing in the grammar, so the names spell it out.
@@ -43,6 +52,8 @@ namespace NGUAdvisor.Managers
                 case "BT":
                     return Enumerable.Range(0, 12)
                                      .Select(i => (i < 6 ? "Attack skill " : "Defense skill ") + (i % 6 + 1)).ToArray();
+                case "RIT":
+                    return kind == ResourceKind.Magic ? Rituals : null;
                 case "HACK":
                 case "MILEHACK":
                     return SystemCatalog.Hacks.Select(h => h.Value).ToArray();

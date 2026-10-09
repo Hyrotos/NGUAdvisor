@@ -1150,7 +1150,9 @@ window.addEventListener("load", guard(() => {
                      T("ALLNGU", "All NGUs"), T("AT", "Advanced Training (by number)", 4, ["Toughness","Power","Block","Wandoos Energy","Wandoos Magic"]),
                      T("WAN", "Wandoos (energy)"), T("TM", "Time Machine (energy)"), T("BESTAUG", "Best Augment"), T("ALLBT", "All Basic Training")],
             magic:  [T("NGU", "NGU (by number)", 6, ["Ygg","EXP","Power-β","Number","TM","Energy","Adv-β"]),
-                     T("BR", "Blood Rituals — cast (optional -seconds limit)", 86400), T("TM", "Time Machine (magic)")],
+                     Object.assign(T("BR", "Blood Rituals — cast (optional -seconds limit)", 86400), { unit: "s", blank: "no limit" }),
+                     T("RIT", "Ritual (by number)", 2, ["Poke Yourself with a Tack", "Fifty Papercuts", "A Big-Ass Hickey"]),
+                     T("TM", "Time Machine (magic)")],
             r3:     [T("HACK", "Hack (by number)", 14, ["Attack/Defense","Adventure","Time Machine","Drop Chance","Augment Speed","Energy NGU",
                        "Magic NGU","Blood","QP","Daycare","EXP","NUMBER","PP","Hack Hack","Wish"]), T("ALLHACK", "All Hacks")]
           },
@@ -1206,6 +1208,16 @@ window.addEventListener("load", guard(() => {
         ok("an optional index left out stays left out", field(ed, 2, "idx").value === "");
         fireR(field(ed, 0, "cap"), "change");
         ok("which round-trips", payloadOf(ed) === "NGU-3, BR-3600, BR", payloadOf(ed));
+        // A ritual is picked by name; BR's number is a time limit and stays a number, with its unit.
+        ed = openBp("magic", "RIT-1, RIT-7, BR-600");
+        ok("a ritual is a picker of number and name",
+           field(ed, 0, "idx").tagName === "SELECT" && field(ed, 0, "idx").value === "1" && /1 — Fifty Papercuts/.test(field(ed, 0, "idx").textContent));
+        ok("a ritual number the game list does not cover is kept, not swapped",
+           field(ed, 1, "code") ? field(ed, 1, "idx").value === "7" : /RIT-7/.test(rows(ed)[1].textContent), rows(ed)[1].textContent);
+        ok("BR's time limit shows its unit and what empty means",
+           field(ed, 2, "idx").type === "number" && field(ed, 2, "idx").placeholder === "no limit" && /\bs\b/.test(field(ed, 2, "idx").parentNode.textContent));
+        fireR(field(ed, 0, "cap"), "change");
+        ok("and all three round-trip", payloadOf(ed) === "RIT-1, RIT-7, BR-600", payloadOf(ed));
         ed = openBp("r3", "HACK-13, ALLHACK");
         ok("hacks are named", /13 — Hack Hack/.test(field(ed, 0, "idx").textContent));
 

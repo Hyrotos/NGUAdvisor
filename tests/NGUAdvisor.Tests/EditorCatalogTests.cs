@@ -16,7 +16,7 @@ namespace NGUAdvisor.Tests
                 {
                     var names = EditorCatalog.IndexNames(kind, bt.Code);
                     if (!bt.HasIndex) { Assert.Null(names); continue; }
-                    if (names == null) continue;   // a plain number: RIT, BR
+                    if (names == null) continue;   // a plain number: BR's time limit
                     Assert.True(names.Length == bt.IndexMax + 1,
                         $"{kind} {bt.Code}: {names.Length} names for indexes 0..{bt.IndexMax}");
                     Assert.All(names, n => Assert.False(string.IsNullOrWhiteSpace(n)));
@@ -42,10 +42,23 @@ namespace NGUAdvisor.Tests
             Assert.Equal("Laser Sword — upgrade", aug[13]);
         }
 
+        // The game's table counts rituals from 1; the token index is one less.
+        [Fact]
+        public void Rituals_are_named_in_the_games_order_from_index_zero()
+        {
+            var rit = EditorCatalog.IndexNames(ResourceKind.Magic, "RIT");
+            Assert.Equal(new[]
+            {
+                "Poke Yourself with a Tack", "Fifty Papercuts", "A Big-Ass Hickey", "Eat a bowl of Barbed Wire",
+                "Grand Theft Blood Bank", "Self Decapitation", "Hug a Woodchipper", "Turn Yourself Inside Out"
+            }, rit);
+            Assert.Equal(7, PriorityCatalog.Find(ResourceKind.Magic, "RIT").IndexMax);
+            Assert.Null(EditorCatalog.IndexNames(ResourceKind.Energy, "RIT"));   // rituals take magic only
+        }
+
         [Fact]
         public void A_plain_number_index_and_an_unknown_code_have_no_names()
         {
-            Assert.Null(EditorCatalog.IndexNames(ResourceKind.Magic, "RIT"));
             Assert.Null(EditorCatalog.IndexNames(ResourceKind.Magic, "BR"));
             Assert.Null(EditorCatalog.IndexNames(ResourceKind.Energy, "NOPE"));
             Assert.Null(EditorCatalog.IndexNames(ResourceKind.Energy, null));
