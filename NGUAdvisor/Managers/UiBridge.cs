@@ -389,6 +389,14 @@ namespace NGUAdvisor.Managers
             // frame's hitch), same work the 10-minute ApplyBoostPriority pass does. Read-only: it changes
             // no gear and trashes nothing; the verdict rides the next snapshot's `invVerdict` node.
             d["computeInventory"] = () => { _notice = InventoryAdvisor.ComputeForUi(); };
+            // "Export game state" (Log drawer) — one readable text file of what the advisor sees right
+            // now, names included. Read-only. Commands drain on the main thread, so it runs here.
+            d["exportState"] = () =>
+            {
+                string path = StateExport.Write();
+                _notice = path != null ? "Game state exported to " + path
+                                       : "The state export failed — check the Debug log.";
+            };
             // "Locate" on the Walderp chip — jumps the GAME to the menu he is hiding in. Strictly
             // player-initiated: never fired on a timer, and it does NOT click him. He relocates every 180s,
             // so acting on our own would risk yanking the screen toward a target that has already moved.

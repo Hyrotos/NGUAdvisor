@@ -24,7 +24,7 @@ namespace NGUAdvisor.Managers
         // Latch for the "seated the DC digger" line — once per farm, not once per 30s tick.
         private static bool _dcSeatAnnounced;
 
-        private static readonly string[] DiggerNames =
+        public static readonly string[] DiggerNames =
             { "Drops", "Wandoos", "Stats", "Adv", "E-NGU", "M-NGU", "E-Beard", "M-Beard", "PP", "Daycare", "Blood", "EXP" };
         public static readonly string[] BeardNames =
             { "Stats", "Drops", "Number", "NGU", "Wandoos", "Adv", "Golden" };

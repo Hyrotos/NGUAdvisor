@@ -140,6 +140,9 @@ namespace NGUAdvisor
         public static void RequestAllocationReload() => _reloadAllocationPending = true;
         // Same deferral for a full config re-read (settings + form + allocation), mirroring ConfigWatcher.
         public static void RequestSettingsReload() => _reloadSettingsPending = true;
+        // And for a state export asked for from outside the game (StateExport.RequestPath).
+        private static volatile bool _stateExportPending;
+        public static void RequestStateExport() => _stateExportPending = true;
 
         // HOT RELOAD (F5 / companion "hotReloadAdvisor") — swaps the PAYLOAD DLL, not the settings.
         // Deferred through a flag for the same reason as the two above, only more so: the reload tears
@@ -547,6 +550,18 @@ namespace NGUAdvisor
             try { GrowthTracker.Tick(); }
             catch (Exception e) { LogDebug("GrowthTracker tick: " + e.Message); }
 
+            // A state export asked for by dropping the request file. Polled here rather than per
+            // frame: once a second is plenty, and this tick is already on the main thread.
+            try
+            {
+                if (Managers.StateExport.Requested())
+                {
+                    Log("State export requested from disk");
+                    RequestStateExport();
+                }
+            }
+            catch (Exception e) { LogDebug("State export poll: " + e.Message); }
+
             try { if (_uiBridge != null) _uiBridge.Publish(_timeLeft); }
             catch (Exception e) { LogDebug("UiBridge tick: " + e.Message); }
         }
@@ -583,6 +598,12 @@ namespace NGUAdvisor
                 _reloadAllocationPending = false;
                 try { LoadAllocation(); }
                 catch (Exception e) { LogDebug($"Deferred allocation reload failed: {e.Message}"); }
+            }
+            if (_stateExportPending)
+            {
+                _stateExportPending = false;
+                try { Managers.StateExport.Write(); }
+                catch (Exception e) { LogDebug($"Deferred state export failed: {e.Message}"); }
             }
 
             // Apply any commands the out-of-process UI sent (drained on the main thread, per-command guarded).
