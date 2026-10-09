@@ -85,6 +85,7 @@ namespace NGUAdvisor.Managers
         private JSONObject _macguffinsCache;             // static macguffin id->name map (FavoredMacguffin dropdown); built once
         private JSONObject _zonesCache;                  // static non-titan zone id->name map (SnipeZone / GearHuntZone dropdowns); built once
         private JSONObject _advEnemiesCache;             // static adventure enemy spriteId->name map (blacklist picker); built once
+        private JSONArray _gearChainNamesCache;          // the named chains among them: selectable, but not usable as a chain STEP
         private JSONArray _gearObjectivesCache;          // static gear-objective name list (loadout Advisor dropdowns); built once
         private JSONArray _transformMetaCache;           // transform-chain {name, step} descriptors (grid labels); refreshed ~every 5s
         private JSONArray _titanAkCache;                 // per-titan autokill readiness chips; refreshed ~every 5s (reflection-heavy)
@@ -1696,11 +1697,14 @@ namespace NGUAdvisor.Managers
                         var arr = new JSONArray();
                         foreach (var o in objs) arr.Add(o.Name);
                         // Named chains are picked exactly like an objective, so they share the list.
-                        foreach (var p in GearChain.Presets) arr.Add(p.Name);
+                        var chains = new JSONArray();
+                        foreach (var p in GearChain.Presets) { arr.Add(p.Name); chains.Add(p.Name); }
+                        _gearChainNamesCache = chains;
                         _gearObjectivesCache = arr;
                     }
                 }
                 if (_gearObjectivesCache != null) root["gearObjectives"] = _gearObjectivesCache;
+                if (_gearChainNamesCache != null) root["gearChainNames"] = _gearChainNamesCache;
             });
 
             // --- wish priority + blacklist (int[] wish ids); written each snapshot like boostLists. ---

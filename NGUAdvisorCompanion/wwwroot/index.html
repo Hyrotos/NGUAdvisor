@@ -1127,6 +1127,10 @@
   .le-row.drop-after  { box-shadow: inset 0 -2px 0 0 var(--accent); }
   .le-empty { font-family: var(--sans); font-size: var(--fs-3); color: var(--faint); padding: 6px 2px; }
   .le-add { display: flex; gap: var(--sp-2); margin: 4px 0 10px; }
+  /* Gear chain steps: the loadout list's row, holding two pickers instead of an id. */
+  .peg-step .tle-sel { min-width: 0; flex: 1 1 0; }
+  .peg-step .peg-slots { flex: 0 1 190px; }
+  .peg-spell { font-family: var(--mono); font-size: var(--fs-2); color: var(--muted); overflow-wrap: anywhere; }
   /* .tin hard-sets width:46px, and with border-box that leaves 34px of text — about five characters
      of 11px mono, before a number input's spinner takes another ~17px. So the placeholders rendered as
      "ite" and "gea". These add-boxes need to show "item ID" / "gear ID" and a typed 3-4 digit id, so
@@ -4918,6 +4922,105 @@
   // typed. A name with a "(" in it is a spelled chain; no plain objective or named chain has one.
   var PE_CHAIN = "__chain__";
   function peIsChain(name){ return String(name||"").indexOf("(")>=0; }
+
+  // THE CHAIN FORM. One row per step — an objective, and how many of the accessory slots still free
+  // it may take — because that is what a chain IS; the spelling is only how it is stored. The rows are
+  // the truth while the editor is open and the hidden [data-k="gearchain"] input carries their
+  // spelling, so everything downstream (peSyncGear, Save) still reads one string.
+  var PE_MAX_STEPS = 5, PE_MAX_SLOTS = 16;
+  var PE_STEPS = [], PE_PIN = false, PE_CHAIN_NAMES = null;
+  // A chain the profile carries that the rows cannot show (hand-edited, and malformed). It is kept
+  // VERBATIM until a row is touched, so opening the editor and saving something else on the row can
+  // never swap it for the default chain.
+  var PE_RAW = "";
+  // What a step may optimise for: every objective that is not itself a chain.
+  function peStepObjectives(){
+    var all = GEAR_OBJECTIVES || [];
+    return all.filter(function(n){
+      return PE_CHAIN_NAMES ? PE_CHAIN_NAMES.indexOf(n)<0 : n.indexOf(" + ")<0; });
+  }
+  // "Adventure(3) > Respawn(1)+PowerWeapon" -> steps. Null if any step cannot be read: a chain with a
+  // step quietly missing is a different chain, so the form must not pretend to show it.
+  function peParseChain(spelled){
+    var steps=[], pin=false, parts=String(spelled||"").split(">");
+    for(var i=0;i<parts.length;i++){
+      var m=/^\s*(.*?)\s*\(\s*(\d+|all)\s*\)\s*(\+powerweapon)?\s*$/i.exec(parts[i]);
+      if(!m || !m[1]) return null;
+      if(m[3]) pin=true;
+      steps.push({ obj:m[1], slots:/^all$/i.test(m[2]) ? "" : String(parseInt(m[2],10)) });
+    }
+    return steps.length ? { steps:steps, pin:pin } : null;
+  }
+  function peSpellChain(){
+    if(PE_RAW) return PE_RAW;
+    return PE_STEPS.filter(function(s){ return s.obj; }).map(function(s, i){
+      return s.obj+"("+(s.slots==="" ? "all" : s.slots)+")"+(PE_PIN && i===0 ? "+PowerWeapon" : "");
+    }).join(" > ");
+  }
+  function peLoadChain(objective){
+    var parsed = peIsChain(objective) ? peParseChain(objective) : null;
+    var first = peStepObjectives()[0] || "";
+    PE_STEPS = parsed ? parsed.steps.slice(0, PE_MAX_STEPS) : [{ obj:first, slots:"" }];
+    PE_PIN = !!(parsed && parsed.pin);
+    PE_RAW = peIsChain(objective) && !parsed ? String(objective) : "";
+  }
+  function peDrawChain(ed){
+    var box=ed.querySelector("#pegSteps"); if(!box) return;
+    var objs=peStepObjectives();
+    box.innerHTML = PE_STEPS.map(function(s, i){
+      var names = objs.indexOf(s.obj)>=0 || !s.obj ? objs : [s.obj].concat(objs);   // keep a name the list lacks
+      var osel = names.map(function(n){ return '<option value="'+esc(n)+'"'+(n===s.obj?' selected':'')+'>'+esc(n)+'</option>'; }).join("");
+      var counts = [];
+      for(var c=0;c<=PE_MAX_SLOTS;c++) counts.push(String(c));
+      if(s.slots!=="" && counts.indexOf(s.slots)<0) counts.push(s.slots);
+      var ssel = '<option value=""'+(s.slots===""?' selected':'')+'>every free accessory slot</option>'+
+        counts.map(function(c){
+          var label = c==="0" ? "no accessory slots" : c==="1" ? "up to 1 accessory slot" : "up to "+c+" accessory slots";
+          return '<option value="'+c+'"'+(c===s.slots?' selected':'')+'>'+label+'</option>'; }).join("");
+      return '<div class="le-row peg-step" data-i="'+i+'"><span class="ix">'+(i+1)+'</span>'+
+        '<select class="tle-sel" data-cstep="obj" aria-label="Step '+(i+1)+' objective">'+osel+'</select>'+
+        '<select class="tle-sel peg-slots" data-cstep="slots" aria-label="Step '+(i+1)+' accessory slots">'+ssel+'</select>'+
+        '<span class="le-ctrls">'+
+        '<button class="le-btn" type="button" data-cstepmove="up" aria-label="Move step '+(i+1)+' up"'+(i===0?' disabled':'')+'>↑</button>'+
+        '<button class="le-btn" type="button" data-cstepmove="down" aria-label="Move step '+(i+1)+' down"'+(i===PE_STEPS.length-1?' disabled':'')+'>↓</button>'+
+        '<button class="le-btn" type="button" data-cstepremove aria-label="Remove step '+(i+1)+'"'+(PE_STEPS.length<2?' disabled':'')+'>✕</button>'+
+        '</span></div>';
+    }).join("");
+    var add=ed.querySelector("#pegStepAdd"); if(add) add.disabled = PE_STEPS.length>=PE_MAX_STEPS;
+    var pin=ed.querySelector("#pegPin"); if(pin) pin.checked = PE_PIN;
+    peChainChanged(ed);
+  }
+  // The rows changed: re-spell into the hidden field and let the gear form re-serialise.
+  function peChainChanged(ed){
+    var hidden=ed.querySelector('[data-k="gearchain"]'); if(hidden) hidden.value = peSpellChain();
+    var spell=ed.querySelector(".peg-spell");
+    if(spell) spell.textContent = PE_RAW ? "Can’t show “"+PE_RAW+"” as steps — it is kept as written until you change a step."
+                                         : peSpellChain();
+    peSyncGear(ed);
+  }
+  function peChainEvent(ed, t, isClick){
+    var row = t.closest ? t.closest(".peg-step") : null, i = row ? parseInt(row.getAttribute("data-i"),10) : -1;
+    PE_RAW = "";   // any touch means the rows are now what the user wants
+    if(!isClick){
+      if(t.id==="pegPin"){ PE_PIN = !!t.checked; peChainChanged(ed); return true; }
+      var k = t.getAttribute && t.getAttribute("data-cstep");
+      if(!k || !PE_STEPS[i]) return false;
+      PE_STEPS[i][k] = t.value;
+      peChainChanged(ed);
+      return true;
+    }
+    if(t.id==="pegStepAdd"){
+      if(PE_STEPS.length<PE_MAX_STEPS) PE_STEPS.push({ obj:peStepObjectives()[0]||"", slots:"" });
+    } else if(t.hasAttribute && t.hasAttribute("data-cstepremove")){
+      if(PE_STEPS.length>1 && PE_STEPS[i]) PE_STEPS.splice(i,1);
+    } else if(t.getAttribute && t.getAttribute("data-cstepmove")){
+      var j = t.getAttribute("data-cstepmove")==="up" ? i-1 : i+1;
+      if(!PE_STEPS[i] || j<0 || j>=PE_STEPS.length) return true;
+      var tmp=PE_STEPS[i]; PE_STEPS[i]=PE_STEPS[j]; PE_STEPS[j]=tmp;
+    } else return false;
+    peDrawChain(ed);
+    return true;
+  }
   function peSyncGear(ed){
     var hidden=ed.querySelector('[data-k="payload"]'); if(!hidden) return;
     var objEl=ed.querySelector('[data-k="gearobj"]'), respEl=ed.querySelector('[data-k="gearresp"]');
@@ -5012,11 +5115,14 @@
           '<option value="'+PE_CHAIN+'"'+(isChain?' selected':'')+'>Custom chain…</option>'+
           '</select>';
         objField += '</div><div class="tle-row peg-chainrow"'+(isChain?'':' hidden')+'><label for="pegChain">Chain</label>'+
-          '<span class="tle-wide"><input class="tle-wide" id="pegChain" data-k="gearchain" value="'+esc(isChain?g.objective:"")+'" '+
-          'placeholder="Adventure(3) > Respawn(1) > Adventure(all)" spellcheck="false">'+
-          '<div class="tle-hint mut">Up to 5 steps, in order. Each is an objective and how many of the free accessory slots it may '+
-          'take — a number, or “all”. The first step that scores weapons and armour picks those. Add “+PowerWeapon” to a step to '+
-          'hold your hardest-hitting weapon.</div></span>';
+          '<span class="tle-wide"><input type="hidden" id="pegChain" data-k="gearchain" value="'+esc(isChain?g.objective:"")+'">'+
+          '<div class="listed" id="pegSteps"></div>'+
+          '<div class="le-add"><button class="btn" type="button" id="pegStepAdd">Add step</button>'+
+          '<label class="tle-time"><input type="checkbox" id="pegPin"> <span class="mut">hold your hardest-hitting weapon in the main hand</span></label></div>'+
+          '<div class="tle-hint mut">Steps run in order, at most '+PE_MAX_STEPS+'. Each takes its share of the accessory slots still free, '+
+          'and hands on what it does not fill. Weapons and armour go to the first step whose stats they carry.</div>'+
+          '<div class="peg-spell"></div></span>';
+        peLoadChain(g.objective);
       } else {
         objField = '<input class="tle-wide" id="pegObj" data-k="gearobj" value="'+esc(g.objective)+'" placeholder="objective name — e.g. Time Machine">';
       }
@@ -5094,7 +5200,7 @@
   // The slot list is built from BLISTS state, so it can only be drawn once the editor is in the DOM.
   function peAfterMount(ed){
     if(!ed) return;
-    if(ed.querySelector("#peLocks")){ drawList("peLocks"); peSyncGear(ed); return; }
+    if(ed.querySelector("#peLocks")){ drawList("peLocks"); peDrawChain(ed); peSyncGear(ed); return; }
     if(!ed.querySelector("#peSlots")) return;
     drawList("peSlots");
     peBuildAdd();
@@ -5901,6 +6007,7 @@
   var GEAR_OBJECTIVES = null;
   function renderGearObjectives(s){
     if(s.gearObjectives && !GEAR_OBJECTIVES) GEAR_OBJECTIVES = s.gearObjectives.slice();
+    if(s.gearChainNames && !PE_CHAIN_NAMES) PE_CHAIN_NAMES = s.gearChainNames.slice();
     if(_gearObjBuilt || !s.gearObjectives) return;
     var sels=document.querySelectorAll('select[data-dyn="gearObjectives"]'); if(!sels.length) return;
     var tail=s.gearObjectives.map(function(n){ return '<option value="'+esc(n)+'">'+esc(n)+'</option>'; }).join("");
@@ -6533,7 +6640,9 @@
       } else if(t.id === "peCount"){
         // The digger activation count lives beside the list and serialises into the same payload.
         peSyncPayload();
-      } else if(t.matches && t.matches('[data-k="gearobj"],[data-k="gearresp"],[data-k="gearchain"]')){
+      } else if(t.matches && t.matches('[data-cstep],#pegPin')){
+        var ced=document.querySelector(".tl-editor"); if(ced) peChainEvent(ced, t, false);
+      } else if(t.matches && t.matches('[data-k="gearobj"],[data-k="gearresp"]')){
         // Gear Lock: the objective and the respawn switch serialise into the same payload as the
         // locked-item list. Deliberately NOT [data-setting] — this is breakpoint content that saves
         // with the row, not a live setting, and posting it as one would write to the wrong place.
@@ -6768,6 +6877,10 @@
       }
       // Gear Lock: add an item ID to the breakpoint's list. Local to the editor, like the slot picker
       // above — it saves with the breakpoint, not as a setting (see listSend's `local` branch).
+      if(e.target && e.target.matches && e.target.matches("#pegStepAdd,[data-cstepmove],[data-cstepremove]")){
+        var ced=document.querySelector(".tl-editor");
+        if(ced && peChainEvent(ced, e.target, true)) return;
+      }
       if(e.target && e.target.id === "peLocksAddBtn"){
         var idIn=$("peLocksAdd");
         if(idIn && idIn.value!==""){

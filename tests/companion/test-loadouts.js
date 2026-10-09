@@ -974,35 +974,68 @@ window.addEventListener("load", guard(() => {
       }
 
       // A SPELLED CHAIN is an objective name, so it rides in the same payload clause. The picker
-      // cannot list it, and used to call it "not recognised".
+      // cannot list it, and used to call it "not recognised". It is edited as ROWS, one per step.
+      const fire = (el, type) => el.dispatchEvent(new window.Event(type, { bubbles: true }));
+      const steps = e => Array.from(e.querySelectorAll("#pegSteps .peg-step"));
+      const stepOf = (e, i) => ({ obj: steps(e)[i].querySelector('[data-cstep="obj"]'),
+                                  slots: steps(e)[i].querySelector('[data-cstep="slots"]') });
       ed = openBp("gear", "Lock: 301; Optimize+Respawn: Adventure(3) > Respawn(1) > Adventure(all)");
       if (ed) {
-        const sel = ed.querySelector('[data-k="gearobj"]'), chain = ed.querySelector('[data-k="gearchain"]');
+        const sel = ed.querySelector('[data-k="gearobj"]');
         ok("a spelled chain selects Custom chain, not 'not recognised'",
            sel.value === "__chain__" && !/not recognised/.test(sel.textContent), sel.value);
-        ok("the chain field is shown and carries the spelling",
-           !ed.querySelector(".peg-chainrow").hidden && chain.value === "Adventure(3) > Respawn(1) > Adventure(all)", chain.value);
+        ok("the chain shows one row per step",
+           !ed.querySelector(".peg-chainrow").hidden && steps(ed).length === 3, String(steps(ed).length));
+        ok("each row carries its step's objective and budget",
+           stepOf(ed, 0).obj.value === "Adventure" && stepOf(ed, 0).slots.value === "3" &&
+           stepOf(ed, 1).obj.value === "Respawn" && stepOf(ed, 1).slots.value === "1" &&
+           stepOf(ed, 2).slots.value === "");
         ok("a spelled chain round-trips verbatim",
            payloadOf(ed) === "Lock: 301; Optimize+Respawn: Adventure(3) > Respawn(1) > Adventure(all)", payloadOf(ed));
+        ok("a step cannot be a named chain", !/ \+ /.test(stepOf(ed, 0).obj.textContent), stepOf(ed, 0).obj.textContent);
 
-        chain.value = "Respawn(1) > NGUs(all); x: y";
-        chain.dispatchEvent(new window.Event("change", { bubbles: true }));
-        ok("editing the chain rewrites the payload, without the payload's own separators",
-           payloadOf(ed) === "Lock: 301; Optimize+Respawn: Respawn(1) > NGUs(all) x y", payloadOf(ed));
+        stepOf(ed, 1).slots.value = "2"; fire(stepOf(ed, 1).slots, "change");
+        stepOf(ed, 2).obj.value = "NGUs"; fire(stepOf(ed, 2).obj, "change");
+        ok("changing a row rewrites the payload",
+           payloadOf(ed) === "Lock: 301; Optimize+Respawn: Adventure(3) > Respawn(2) > NGUs(all)", payloadOf(ed));
 
-        sel.value = "NGUs";
-        sel.dispatchEvent(new window.Event("change", { bubbles: true }));
-        ok("picking a listed objective hides the chain field and drops the chain",
+        fire(steps(ed)[0].querySelector('[data-cstepmove="down"]'), "click");
+        ok("a step moves down", payloadOf(ed) === "Lock: 301; Optimize+Respawn: Respawn(2) > Adventure(3) > NGUs(all)", payloadOf(ed));
+        fire(steps(ed)[1].querySelector("[data-cstepremove]"), "click");
+        ok("a step is removed", payloadOf(ed) === "Lock: 301; Optimize+Respawn: Respawn(2) > NGUs(all)", payloadOf(ed));
+
+        ed.querySelector("#pegPin").checked = true; fire(ed.querySelector("#pegPin"), "change");
+        ok("the weapon pin is written on the lead step",
+           payloadOf(ed) === "Lock: 301; Optimize+Respawn: Respawn(2)+PowerWeapon > NGUs(all)", payloadOf(ed));
+
+        for (let n = 0; n < 6; n++) fire(ed.querySelector("#pegStepAdd"), "click");
+        ok("a chain stops at five steps", steps(ed).length === 5 && ed.querySelector("#pegStepAdd").disabled, String(steps(ed).length));
+
+        sel.value = "NGUs"; fire(sel, "change");
+        ok("picking a listed objective hides the steps and drops the chain",
            ed.querySelector(".peg-chainrow").hidden && payloadOf(ed) === "Lock: 301; Optimize+Respawn: NGUs", payloadOf(ed));
+      }
+      ed = openBp("gear", "Optimize: Drop Chance(all) > Adventure(0)+PowerWeapon");
+      if (ed) {
+        ok("a pin on any step ticks the box", ed.querySelector("#pegPin").checked);
       }
       ed = openBp("gear", "Optimize: NGUs");
       if (ed) {
         const sel = ed.querySelector('[data-k="gearobj"]');
-        ok("a listed objective keeps the chain field hidden", ed.querySelector(".peg-chainrow").hidden);
-        sel.value = "__chain__";
-        sel.dispatchEvent(new window.Event("change", { bubbles: true }));
-        ok("Custom chain with nothing typed is not an objective",
-           !ed.querySelector(".peg-chainrow").hidden && payloadOf(ed) === "", payloadOf(ed));
+        ok("a listed objective keeps the steps hidden", ed.querySelector(".peg-chainrow").hidden);
+        ok("opening a listed objective leaves its payload alone", payloadOf(ed) === "Optimize: NGUs", payloadOf(ed));
+        sel.value = "__chain__"; fire(sel, "change");
+        ok("Custom chain starts as one step taking every slot",
+           steps(ed).length === 1 && /^Optimize: [^(>]+\(all\)$/.test(payloadOf(ed)), payloadOf(ed));
+        ok("the only step cannot be removed", steps(ed)[0].querySelector("[data-cstepremove]").disabled);
+      }
+      // A chain the rows cannot show is kept as written, not swapped for the default one.
+      ed = openBp("gear", "Optimize: Adventure(3) > (oops");
+      if (ed) {
+        ok("an unreadable chain survives being opened", payloadOf(ed) === "Optimize: Adventure(3) > (oops", payloadOf(ed));
+        ok("and the form says so", /kept as written/.test(ed.querySelector(".peg-spell").textContent));
+        fire(ed.querySelector("#pegStepAdd"), "click");
+        ok("until a step is touched", /^Optimize: [^>]+\(all\) > [^>]+\(all\)$/.test(payloadOf(ed)), payloadOf(ed));
       }
 
       // An empty gear row must not invent content, and must say what to do.
