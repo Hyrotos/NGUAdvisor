@@ -347,7 +347,8 @@ namespace NGUAdvisor.Managers
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             { "Comment", "Note", "Thresholds", "Timing", "DiggerOptions", "BeardOptions", "GO Notes", "GO Note" };
 
-        private static bool IsCommentKey(string key)
+        // Public for ProfileValidator: a repeated comment key is not a structural error (see there).
+        public static bool IsCommentKey(string key)
         {
             if (CommentExact.Contains(key)) return true;
             if (key.StartsWith("Comment", StringComparison.OrdinalIgnoreCase)) return true;  // Comment2, CommentB

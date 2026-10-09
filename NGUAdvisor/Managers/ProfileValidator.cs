@@ -178,7 +178,12 @@ namespace NGUAdvisor.Managers
                         return false;
                     }
                     if (!ParseString(out err, out var key)) return false;
-                    if (!seen.Add(key))
+                    // A repeated COMMENT key is harmless and common -- several shipped sample profiles
+                    // carry two "Comment" or "PriorityPercentExample2" lines in one object, and the
+                    // model drops every comment key on load anyway. Refusing them meant the editor
+                    // could not save those profiles at all. A repeated DATA key is still an error:
+                    // only one of the two survives the parse, and nothing says which was meant.
+                    if (!seen.Add(key) && !ProfileModel.IsCommentKey(key))
                     {
                         err = Err($"Duplicate property name '{key}' in object.");
                         return false;
