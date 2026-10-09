@@ -51,19 +51,43 @@ namespace NGUAdvisor.Tests
                 _thread.Start();
             }
 
+            // ⚠ THE ACCEPT LOOP DIFFERS BY HOST, BECAUSE "ONE CONNECTION AT A TIME" DOES.
+            //
+            // On Windows a client can only connect while a pipe instance is waiting, so creating a
+            // fresh single-instance server per command (what the injector does) loses nothing: the
+            // next client simply fails to connect and retries.
+            //
+            // On Linux a named pipe is a listening socket. A client connects, writes and closes
+            // against the BACKLOG while this thread is still reading the previous command — and when
+            // the last server stream on the name is disposed, the socket closes and every command
+            // queued behind it is dropped on the floor ("received 6 of 30"). The client is not at
+            // fault and neither is the injector, which never runs on this side of Wine.
+            //
+            // So here the next stream is opened BEFORE the current one is disposed. .NET shares one
+            // listening socket between the streams of a name, so it never closes, nothing queued is
+            // lost, and connections are still served strictly one at a time and in arrival order —
+            // which is the property under test.
+            private static readonly bool Windows = Path.DirectorySeparatorChar == '\\';
+
+            private NamedPipeServerStream Open() =>
+                new NamedPipeServerStream(_pipe, PipeDirection.In, Windows ? 1 : 2,
+                                          PipeTransmissionMode.Byte, PipeOptions.None);
+
             private void Run()
             {
+                NamedPipeServerStream held = null;   // Linux only: the stream keeping the socket open
                 try
                 {
+                    if (!Windows) held = Open();
                     while (!_stop && _lines.Count < _expect)
                     {
                         // Simulates a server that is slow to re-accept — the exact condition the counter-audit
                         // named as the reordering trigger. It must not reorder anything now.
                         if (_acceptDelayMs > 0) Thread.Sleep(_acceptDelayMs);
-                        using (var s = new NamedPipeServerStream(
-                                   _pipe, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.None))
+                        using (var s = held ?? Open())
                         {
                             s.WaitForConnection();
+                            if (!Windows) held = Open();
                             if (_stop) break;
                             using (var r = new StreamReader(s, new UTF8Encoding(false)))
                             {
@@ -74,6 +98,7 @@ namespace NGUAdvisor.Tests
                     }
                 }
                 catch { /* torn down mid-accept */ }
+                finally { try { held?.Dispose(); } catch { } }
                 _done.Set();
             }
 

@@ -279,8 +279,14 @@ namespace NGUAdvisor.Tests
             Assert.False(BuildStamp.IsDevCopy(BuildStamp.IndexHtmlIn(Deployed),
                                               BuildStamp.IndexHtmlIn(Deployed)));
             // Same directory, spelled differently — a path comparison, not a string comparison.
-            Assert.False(BuildStamp.IsDevCopy(BuildStamp.IndexHtmlIn(@"C:\NGU\injector\companion\."),
-                                              BuildStamp.IndexHtmlIn(@"C:\NGU\INJECTOR\companion")));
+            // Spelled in the HOST's path syntax: a backslash is an ordinary filename character on
+            // Linux, so the Windows spelling is not two spellings of one directory there and the
+            // trailing "\." is never resolved. The rule under test is the same on both.
+            bool windows = System.IO.Path.DirectorySeparatorChar == '\\';
+            string dotted = windows ? @"C:\NGU\injector\companion\." : "/NGU/injector/companion/.";
+            string recased = windows ? @"C:\NGU\INJECTOR\companion" : "/NGU/INJECTOR/companion";
+            Assert.False(BuildStamp.IsDevCopy(BuildStamp.IndexHtmlIn(dotted),
+                                              BuildStamp.IndexHtmlIn(recased)));
         }
 
         // ⚠ SAME RULE AS THE STALE GATE: unknown is not a finding. A companion whose path could not be
