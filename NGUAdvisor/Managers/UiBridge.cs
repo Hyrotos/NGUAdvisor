@@ -1251,7 +1251,7 @@ namespace NGUAdvisor.Managers
             try
             {
                 var msg = _companionDevCopy
-                    ? BuildStamp.DevCopyMessage(_advisorBuilt, _companionBuilt, servedDir, deployedDir)
+                    ? BuildStamp.DevCopyMessage(_advisorBuilt, _companionBuilt, HostPath.For(servedDir), HostPath.For(deployedDir))
                     : BuildStamp.StaleMessage(_advisorBuilt, _companionBuilt);
                 if (msg != null) Main.Log("Advisor: " + msg);
             }

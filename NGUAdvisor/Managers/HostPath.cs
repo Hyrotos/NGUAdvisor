@@ -10,6 +10,9 @@ namespace NGUAdvisor.Managers
     //
     // Wine hands the Unix environment to the Windows process, so the prefix is readable from in here.
     // On real Windows neither variable is set and the path is returned exactly as it came in.
+    //
+    // FOR DISPLAY ONLY. Everything that OPENS a file -- including the paths handed to the companion,
+    // which runs inside the same Wine prefix -- must keep the Windows path.
     public static class HostPath
     {
         // The Wine prefix this process runs in, or null on real Windows. Proton sets

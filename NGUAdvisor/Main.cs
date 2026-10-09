@@ -394,7 +394,7 @@ namespace NGUAdvisor
 
                 ZoneWatcher.Changed += (sender, args) =>
                 {
-                    Log(_dir);
+                    Log(Managers.HostPath.For(_dir));
                     ZoneStatHelper.CreateOverrides(_dir);
                 };
 

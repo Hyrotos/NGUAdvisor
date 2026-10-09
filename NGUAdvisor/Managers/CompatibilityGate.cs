@@ -99,7 +99,7 @@ namespace NGUAdvisor.Managers
             Main.Log("Automation is paused (OBSERVE-ONLY): a game update can move or rename the values the");
             Main.Log("advisor reads, which would make it act on wrong data.");
             Main.Log($"If you have confirmed the advisor still behaves correctly on build {VersionText(live)},");
-            Main.Log($"delete '{_ackPath}' and Reload Advisor to resume automation.");
+            Main.Log($"delete '{HostPath.For(_ackPath)}' and Reload Advisor to resume automation.");
             Main.Log("==============================================================");
         }
 

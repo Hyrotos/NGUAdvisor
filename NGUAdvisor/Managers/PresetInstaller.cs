@@ -122,10 +122,10 @@ namespace NGUAdvisor.Managers
                         Main.Log($"Updated preset {fileName} to the shipped version (your copy was unmodified).");
                     else if (action == PresetInstallPlan.Action.UpdateInPlace)
                         Main.Log($"Updated preset {fileName} to the shipped version. Your copy differed only in " +
-                                 $"formatting or comments and was saved to {backupPath}");
+                                 $"formatting or comments and was saved to {HostPath.For(backupPath)}");
                     else
                         Main.Log($"Replaced preset {fileName} with the shipped version. Your previous copy was " +
-                                 $"saved to {backupPath}");
+                                 $"saved to {HostPath.For(backupPath)}");
                 }
 
                 if (manifestDirty)
