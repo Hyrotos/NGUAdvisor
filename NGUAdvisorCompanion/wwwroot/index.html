@@ -4999,8 +4999,11 @@
           var label = c==="0" ? "no accessory slots" : c==="1" ? "up to 1 accessory slot" : "up to "+c+" accessory slots";
           return '<option value="'+c+'"'+(c===s.slots?' selected':'')+'>'+label+'</option>'; }).join("");
       return '<div class="le-row peg-step" data-i="'+i+'"><span class="ix">'+(i+1)+'</span>'+
-        '<select class="tle-sel" data-cstep="obj" aria-label="Step '+(i+1)+' objective">'+osel+'</select>'+
-        '<select class="tle-sel peg-slots" data-cstep="slots" aria-label="Step '+(i+1)+' accessory slots">'+ssel+'</select>'+
+        // "inp" is the page's own select style. Inside the profile editor `.tl-editor select` outranks
+        // it, so the rows look native to whichever host they are drawn in — without it they fell back
+        // to the browser's white default on the Loadouts page.
+        '<select class="inp tle-sel" data-cstep="obj" aria-label="Step '+(i+1)+' objective">'+osel+'</select>'+
+        '<select class="inp tle-sel peg-slots" data-cstep="slots" aria-label="Step '+(i+1)+' accessory slots">'+ssel+'</select>'+
         '<span class="le-ctrls">'+
         '<button class="le-btn" type="button" data-cstepmove="up" aria-label="Move step '+(i+1)+' up"'+(i===0?' disabled':'')+'>↑</button>'+
         '<button class="le-btn" type="button" data-cstepmove="down" aria-label="Move step '+(i+1)+' down"'+(i===st.steps.length-1?' disabled':'')+'>↓</button>'+
