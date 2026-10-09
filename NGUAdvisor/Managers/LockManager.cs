@@ -110,7 +110,7 @@ namespace NGUAdvisor.Managers
                 }
 
                 if (backToQuest && (Settings.QuestLoadout.Length > 0 || !string.IsNullOrEmpty(Settings.QuestObjective)))
-                    LoadoutManager.ChangeGear(GearOptimizer.ResolveModeGear(Settings.QuestObjective, Settings.QuestObjectiveRespawn, Settings.QuestLoadout));
+                    EquipQuestGear();
             }
             finally
             {
@@ -332,6 +332,38 @@ namespace NGUAdvisor.Managers
             return false;
         }
 
+        // The zone the worn quest set was solved for. Only the "Quest Drop Rate" objective depends on
+        // it; every other quest gear choice is the same in any zone.
+        private static int _questGearZone = -1;
+
+        private static int CurrentQuestZone()
+        {
+            try
+            {
+                var quest = Main.Character.beastQuest;
+                return quest.inQuest ? Main.Character.beastQuestController.curQuestZone() : -1;
+            }
+            catch { return -1; }
+        }
+
+        private static void EquipQuestGear()
+        {
+            _questGearZone = CurrentQuestZone();
+            LoadoutManager.ChangeGear(GearOptimizer.ResolveQuestGear());
+        }
+
+        // The quest lock outlives a single quest, and every quest rolls its own zone -- so a set that
+        // was sized for the previous zone's enemies is re-solved for this one.
+        public static void RefreshQuestGear()
+        {
+            if (!HasQuestLock() || !Settings.ManageQuestLoadouts) return;
+            if (!string.Equals(Settings.QuestObjective, QuestGearSet.ObjectiveName, StringComparison.OrdinalIgnoreCase)) return;
+            int zone = CurrentQuestZone();
+            if (zone < 0 || zone == _questGearZone) return;
+            Log($"Quest zone is now {zone} — re-solving the quest gear");
+            EquipQuestGear();
+        }
+
         public static bool TryQuestSwap()
         {
             if (CanAcquireNewLock(LockType.Quest))
@@ -345,7 +377,7 @@ namespace NGUAdvisor.Managers
                     if (Settings.ManageQuestLoadouts)
                     {
                         Log("Switching to Quest configuration");
-                        LoadoutManager.ChangeGear(GearOptimizer.ResolveModeGear(Settings.QuestObjective, Settings.QuestObjectiveRespawn, Settings.QuestLoadout));
+                        EquipQuestGear();
                     }
 
                     return true;

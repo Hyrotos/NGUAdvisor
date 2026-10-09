@@ -1105,5 +1105,120 @@ namespace NGUAdvisor.Tests
             var own = GearSolver.Solve(bag.Inputs, GearChain.Find("Respawn(2) > Drop Chance(1) > Adventure(all)"));
             Assert.Equal("102/101 201 301 401 501 [611,612,621,601,602]", Set(own));
         }
+
+        // ══ THE QUEST DROP-RATE SET ═══════════════════════════════════════════════════════════════
+        // items/s = quest-drop factor x kills/s, traded against the Power that keeps every kill one
+        // swing. ChainBag's main slots carry 365 Power (200 + 100 x 0.5 offhand + 40 + 30 + 20 + 25),
+        // its power accessories 60 / 50 / 40 / 30, and two quest-drop accessories are added here.
+        private const string QD = GearObjectives.Stat.QuestDrops;
+
+        private static Bag QuestBag()
+            => ChainBag(4).Add(631, GearLockSlot.Accessory, QD, 50).Add(632, GearLockSlot.Accessory, QD, 30);
+
+        // One attack per point of Power score x100, i.e. attack == total Power. An enemy with `hp`
+        // and no defense is a guaranteed one-shot from attack >= hp / 0.8.
+        private static QuestGearSet.Fight QuestFight(double hp, double respawn = 4.0, bool idle = false)
+            => new QuestGearSet.Fight
+            {
+                Enemies = new[] { new QuestGearSet.Enemy { MaxHP = hp } },
+                Idle = idle,
+                SwingSeconds = 1.0,
+                AttackMultiplier = 1.0,
+                AttackPerPower = 100.0,
+                RespawnWithoutGear = respawn,
+            };
+
+        [Fact]
+        public void The_quest_set_gives_up_only_the_adventure_accessories_the_one_shot_can_spare()
+        {
+            var bag = QuestBag();
+            // Needs 450 attack: the main slots (365) plus the two best power accessories (475).
+            // One fewer (425) would no longer one-shot, so exactly two slots are free for quest drops.
+            var c = QuestGearSet.Solve(bag.Inputs, QuestFight(hp: 360), false);
+
+            Assert.True(c.OneShotsEverySpawn);
+            Assert.Equal("Adventure(2) > Respawn(0) > Quest Drops(all)", c.Shape);
+            Assert.Equal(new[] { 601, 602, 631, 632 }, c.Set.Accessories);
+            Assert.Equal(1.8, c.QuestDrops, 12);
+            Assert.Equal(0.25, c.KillsPerSecond, 12);              // one kill per 4 s respawn
+            Assert.Equal(1.8 * 0.25, c.Rate, 12);
+            Assert.Equal(1.0 * 0.25, c.AdventureRate, 12);         // the plain Adventure set: no quest drops
+        }
+
+        // A zone that is not a one-shot in full Adventure gear is a kill problem, not a loot one.
+        [Fact]
+        public void A_zone_the_adventure_set_cannot_one_shot_keeps_the_adventure_set()
+        {
+            var bag = QuestBag();
+            var plain = GearSolver.Solve(bag.Inputs, Obj("Adventure"));
+            var c = QuestGearSet.Solve(bag.Inputs, QuestFight(hp: 1e9), false);
+
+            Assert.False(c.OneShotsEverySpawn);
+            Assert.Equal("Adventure(all)", c.Shape);
+            Assert.Equal(Set(plain), Set(c.Set));
+            Assert.Equal(0.0, c.Rate);
+        }
+
+        // With nothing to spare, no accessory is traded: the full set is already the best one-shot set.
+        [Fact]
+        public void When_every_accessory_is_needed_for_the_one_shot_nothing_is_traded()
+        {
+            var bag = QuestBag();
+            // 545 attack is the whole Adventure set; 436 hp needs exactly that.
+            var c = QuestGearSet.Solve(bag.Inputs, QuestFight(hp: 436), false);
+            Assert.True(c.OneShotsEverySpawn);
+            Assert.Equal("Adventure(all)", c.Shape);
+            Assert.Equal(new[] { 601, 602, 603, 604 }, c.Set.Accessories.OrderBy(x => x));
+        }
+
+        // Respawn is taken when it buys more kills than the quest-drop accessory it displaces.
+        [Fact]
+        public void Respawn_takes_a_slot_when_it_raises_the_rate_more_than_quest_drops_would()
+        {
+            var bag = QuestBag().Add(613, GearLockSlot.Accessory, R, 60);
+            var c = QuestGearSet.Solve(bag.Inputs, QuestFight(hp: 360), false);
+
+            // 613 cuts the 4 s respawn to 1.6 s: 1.5 quest drops / 1.6 s beats 1.8 / 4 s.
+            Assert.Equal("Adventure(2) > Respawn(1) > Quest Drops(all)", c.Shape);
+            Assert.Equal(new[] { 601, 602, 613, 631 }, c.Set.Accessories);
+            Assert.Equal(1.5 / 1.6, c.Rate, 9);
+        }
+
+        [Fact]
+        public void Idle_pays_a_swing_after_every_spawn_and_a_skipped_enemy_costs_a_round_trip()
+        {
+            var bag = QuestBag();
+            var idle = QuestGearSet.Solve(bag.Inputs, QuestFight(hp: 436, idle: true), false);
+            Assert.Equal(1.0 / 5.0, idle.KillsPerSecond, 12);       // 4 s respawn + 1 s swing
+
+            // A skipped enemy never has to be one-shot, and costs respawn + two cooldowns for no kill.
+            var fight = QuestFight(hp: 436);
+            fight.Enemies = new[] { fight.Enemies[0], new QuestGearSet.Enemy { MaxHP = 1e9, Skipped = true } };
+            var skip = QuestGearSet.Solve(bag.Inputs, fight, false);
+            Assert.True(skip.OneShotsEverySpawn);
+            Assert.Equal(1.0 / (4.0 + 6.0), skip.KillsPerSecond, 12);
+        }
+
+        // Enemy defense is halved before it is subtracted, exactly as the game's damage formula does.
+        [Fact]
+        public void Defense_raises_the_attack_a_one_shot_needs()
+        {
+            var bag = QuestBag();
+            var fight = QuestFight(hp: 360);
+            fight.Enemies = new[] { new QuestGearSet.Enemy { MaxHP = 360, Defense = 100 } };   // needs 500 attack
+            var c = QuestGearSet.Solve(bag.Inputs, fight, false);
+            Assert.Equal("Adventure(3) > Respawn(0) > Quest Drops(all)", c.Shape);             // 365 + 60 + 50 + 40 = 515
+        }
+
+        [Fact]
+        public void An_unreadable_fight_is_refused_rather_than_guessed()
+        {
+            var bag = QuestBag();
+            Assert.Null(QuestGearSet.Solve(bag.Inputs, new QuestGearSet.Fight(), false));
+            var noAttack = QuestFight(hp: 360); noAttack.AttackPerPower = 0;
+            Assert.Null(QuestGearSet.Solve(bag.Inputs, noAttack, false));
+            // The picker entry is not a gear objective and must never resolve as one.
+            Assert.Null(GearChain.Find(QuestGearSet.ObjectiveName));
+        }
     }
 }

@@ -339,6 +339,19 @@ window.addEventListener("load", guard(() => {
        titanSel.value);
   }
 
+  // ---- 9c. the Quest card's own objective ---------------------------------------------------
+  // "Quest Drop Rate" is solved for the zone the current quest rolled, so only Quest offers it.
+  {
+    const has = id => Array.from($(id).options).some(o => o.value === "Quest Drop Rate");
+    ok("the Quest picker offers Quest Drop Rate", has("set-QuestObjective"));
+    ok("no other picker does", !has("set-TitanObjective") && !has("set-GoldObjective") && !has("set-GearObjective"));
+    ok("it sits before the listed objectives", $("set-QuestObjective").options[1].value === "Quest Drop Rate");
+    send(baseSnapshot({ settings: { QuestObjective: "Quest Drop Rate" }, loadouts: { QuestLoadout: [94] } }));
+    ok("the setting shows as that entry, not as a custom chain",
+       $("set-QuestObjective").value === "Quest Drop Rate" && $("lc-QuestObjective").hidden, $("set-QuestObjective").value);
+    send(baseSnapshot());
+  }
+
   // ---- 10. Main has no id list; the others do ------------------------------------------------
   ok("Main renders no id list", !$("Main"));
   ok("Main offers the existing refreshGear action",

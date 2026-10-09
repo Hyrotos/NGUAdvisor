@@ -876,12 +876,18 @@ namespace NGUAdvisor.Managers
                     if (string.IsNullOrEmpty(objective))
                     { Main.LogDebug("UiBridge: applyObjective with no objective"); break; }
 
-                    var gobj = GearOptimizer.FindObjective(objective);
+                    // The Quest card's own entry is not a gear objective: it is solved for the quest's
+                    // zone. The fill still shows what it would wear right now.
+                    bool questRate = key == "QuestLoadout"
+                        && string.Equals(objective, QuestGearSet.ObjectiveName, StringComparison.OrdinalIgnoreCase);
+                    var gobj = questRate
+                        ? new GearObjectives.Objective(QuestGearSet.ObjectiveName, new string[0])
+                        : GearOptimizer.FindObjective(objective);
                     if (gobj == null)
                     { _notice = $"Couldn't find the '{objective}' objective."; break; }
 
                     int[] optimized;
-                    try { optimized = GearOptimizer.OptimizeIds(gobj, respawn); }
+                    try { optimized = questRate ? GearOptimizer.ResolveQuestGear() : GearOptimizer.OptimizeIds(gobj, respawn); }
                     catch (Exception oe)
                     {
                         Main.LogDebug($"UiBridge: applyObjective optimize failed: {oe.Message}");

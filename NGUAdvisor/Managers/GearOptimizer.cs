@@ -330,6 +330,124 @@ namespace NGUAdvisor.Managers
             return ResolveModeGear(obj, Main.Settings.GoldObjectiveRespawn, fallback);
         }
 
+        // Quest gear. Everything the Quest loadout card can say is honoured exactly as before -- an
+        // item list, a plain objective, a chain -- with one addition: the "Quest Drop Rate" entry,
+        // which solves for the most quest items per second in the zone the current quest rolled
+        // (QuestGearSet has the rule and the reasoning).
+        public static int[] ResolveQuestGear()
+        {
+            var s = Main.Settings;
+            if (!string.Equals(s.QuestObjective, QuestGearSet.ObjectiveName, StringComparison.OrdinalIgnoreCase))
+                return ResolveModeGear(s.QuestObjective, s.QuestObjectiveRespawn, s.QuestLoadout);
+
+            int zone = -1;
+            try
+            {
+                var c = Main.Character;
+                if (c.beastQuest.inQuest) zone = c.beastQuestController.curQuestZone();
+            }
+            catch { }
+
+            try
+            {
+                var inputs = LiveInputs();
+                QuestGearSet.Fight fight;
+                if (zone >= 0 && TryReadQuestFight(zone, s.QuestCombatMode, out fight))
+                {
+                    var choice = QuestGearSet.Solve(inputs, fight, s.QuestObjectiveRespawn);
+                    var ids = choice == null ? null : choice.Set.AllIds().Where(x => x > 0).Distinct().ToArray();
+                    if (ids != null && ids.Length > 0)
+                    {
+                        // questDropChance() already includes the worn gear's factor; dividing it out
+                        // leaves the per-kill chance at a gear factor of 1.
+                        double perHour = 0;
+                        try
+                        {
+                            double wornQd = CurrentScore(FindObjective(GearObjectives.Stat.QuestDrops));
+                            if (wornQd > 0) perHour = Main.Character.beastQuestController.questDropChance() / wornQd * 3600.0;
+                        }
+                        catch { }
+                        Main.Log($"Quest gear for zone {zone}: {choice.Shape} — quest drops x{choice.QuestDrops:0.##}, "
+                               + $"{choice.KillsPerSecond * 3600.0:0} kills/h"
+                               + (perHour > 0 ? $", ~{choice.Rate * perHour:0} items/h (plain Adventure set ~{choice.AdventureRate * perHour:0}/h)" : "")
+                               + (choice.OneShotsEverySpawn ? "." : " — the zone is not a one-shot in full Adventure gear, so the kill set is kept."));
+                        return ids;
+                    }
+                }
+
+                // No quest running yet, or the zone could not be read: the kill-safe shape without the
+                // sizing -- weapons and armour on Adventure, every accessory on Quest Drops.
+                var safe = GearSolver.Solve(inputs, FindObjective("Adventure(0)+PowerWeapon > Quest Drops(all)"),
+                                            s.QuestObjectiveRespawn);
+                var safeIds = safe == null ? new int[0] : safe.AllIds().Where(x => x > 0).Distinct().ToArray();
+                if (safeIds.Length > 0)
+                {
+                    Main.Log($"Quest gear: no readable quest zone — kill-safe Quest Drops set ({safeIds.Length} items).");
+                    return safeIds;
+                }
+            }
+            catch (Exception e) { Main.LogDebug($"Quest drop-rate set failed: {e.Message}"); }
+            return s.QuestLoadout ?? new int[0];
+        }
+
+        // The quest zone's spawn table and the character's swing, read live. AdventureController
+        // builds enemyList in code and spawnEnemy() picks uniformly from enemyList[zone], so the table
+        // is exact and never goes stale on a rebalance.
+        private static bool TryReadQuestFight(int zone, int combatMode, out QuestGearSet.Fight fight)
+        {
+            fight = new QuestGearSet.Fight();
+            try
+            {
+                var c = Main.Character;
+                var table = c.adventureController.enemyList;
+                if (table == null || zone >= table.Count || table[zone] == null || table[zone].Count == 0) return false;
+
+                int[] blacklist = Main.Settings.BlacklistedBosses;
+                bool bossOnly = Main.Settings.SnipeBossOnly && !ZoneHelpers.ZoneIsTitan(zone);
+                var enemies = new List<QuestGearSet.Enemy>();
+                foreach (var e in table[zone])
+                {
+                    if (e == null) continue;
+                    enemies.Add(new QuestGearSet.Enemy
+                    {
+                        MaxHP = e.maxHP,
+                        Defense = e.defense,
+                        Skipped = (blacklist != null && Array.IndexOf(blacklist, e.spriteID) >= 0)
+                               || (bossOnly && e.enemyType != enemyType.boss),
+                    });
+                }
+                if (enemies.Count == 0) return false;
+
+                var power = FindObjective("Power");
+                var respawn = FindObjective(GearObjectives.Stat.Respawn);
+                double wornPower = CurrentScore(power), wornRespawn = CurrentScore(respawn);
+                if (wornPower <= 0 || wornRespawn >= 1.0) return false;
+
+                // Idle swings on Adventure.attackSpeed and applies only idleAttackPower(); a manual mode
+                // shares the global cooldown and applies regAttackPower() -- and, in every mode but
+                // regular-attack-only (4), the offensive buffs the combat loop keeps up.
+                bool idle = combatMode == 0 || !CombatHelpers.RegularAttackUnlocked();
+                double multiplier;
+                if (idle) multiplier = c.idleAttackPower();
+                else
+                {
+                    multiplier = c.regAttackPower();
+                    if (combatMode <= 3)
+                        multiplier *= Math.Max(1.0, c.adventureController.playerController.offenseBuffFactor);
+                }
+                double swing = idle ? c.adventure.attackSpeed : CombatHelpers.BaseGlobalCooldown();
+
+                fight.Enemies = enemies.ToArray();
+                fight.Idle = idle;
+                fight.SwingSeconds = swing > 0 ? swing : 1.0;
+                fight.AttackMultiplier = multiplier > 0 ? multiplier : 1.0;
+                fight.AttackPerPower = c.totalAdvAttack() / wornPower;
+                fight.RespawnWithoutGear = CombatHelpers.BaseRespawnTime() / (1.0 - wornRespawn);
+                return true;
+            }
+            catch (Exception e) { Main.LogDebug($"Quest fight read (zone {zone}): {e.Message}"); return false; }
+        }
+
         // Optimize and equip live. MUST be called on the main thread (equipping touches the game/UI).
         public static void OptimizeAndEquip(GearObjectives.Objective obj, bool forceTopRespawn = false)
         {
@@ -374,11 +492,18 @@ namespace NGUAdvisor.Managers
         public static GearSolver.Result Optimize(GearObjectives.Objective obj, bool forceTopRespawn = false,
                                                  GearLockSet locks = null, GearFloorSet floors = null)
         {
+            return GearSolver.Solve(LiveInputs(), obj, forceTopRespawn, locks, floors);
+        }
+
+        // Everything the search reads off the game, as the plain-old data GearSolver takes. MUST be
+        // called on the main thread.
+        private static GearSolver.Inputs LiveInputs()
+        {
             var idToItem = new Dictionary<int, GearScorer.Item>();
             var pools = BuildPools(idToItem);
             var ic = Main.InventoryController;
 
-            var inputs = new GearSolver.Inputs
+            return new GearSolver.Inputs
             {
                 Pools = pools,
                 IdToItem = idToItem,
@@ -395,8 +520,6 @@ namespace NGUAdvisor.Managers
                 // nearly agree is how this subsystem has produced silent wrong answers.
                 Lookup = id => LookUp(id, idToItem)
             };
-
-            return GearSolver.Solve(inputs, obj, forceTopRespawn, locks, floors);
         }
 
         // The live half of the Gear Lock catalog: is this id a real wearable item, and do you have one?

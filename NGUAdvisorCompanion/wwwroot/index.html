@@ -6089,6 +6089,7 @@
   }
   // Loadouts (finalize slice 2): objective dropdowns (built once from gearObjectives) + per-mode id lists.
   var _gearObjBuilt=false;
+  var QUEST_RATE = "Quest Drop Rate";   // QuestGearSet.ObjectiveName on the advisor side
   /* The objective names, kept for the Profile Editor's Gear Lock picker. That picker is built when an
      editor OPENS, not when the snapshot arrives, so it cannot use the data-dyn sweep below — and it
      must degrade to a free-text field when the list has never arrived (an older injector, or the
@@ -6106,7 +6107,11 @@
       // "follow the profile timeline" for Main, which has no list of its own.
       var lead=sels[i].getAttribute("data-empty") || "Manual — use item list";
       var cur=sels[i].value;
-      sels[i].innerHTML='<option value="">'+esc(lead)+'</option>'+tail+'<option value="'+PE_CHAIN+'">Custom chain…</option>';
+      // The Quest card alone offers the drop-rate entry: it is solved for the zone the current quest
+      // rolled, so it means nothing for any other mode.
+      var own = sels[i].getAttribute("data-setting")==="QuestObjective"
+        ? '<option value="'+QUEST_RATE+'">'+QUEST_RATE+' — most quest items per second</option>' : '';
+      sels[i].innerHTML='<option value="">'+esc(lead)+'</option>'+own+tail+'<option value="'+PE_CHAIN+'">Custom chain…</option>';
       sels[i].value=cur;
     }
     _gearObjBuilt=true;

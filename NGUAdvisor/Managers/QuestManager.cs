@@ -462,6 +462,10 @@ namespace NGUAdvisor.Managers
                 if (!LockManager.TryQuestSwap())
                     Log("Tried to equip quest loadout but unable to acquire lock");
             }
+            else
+            {
+                LockManager.RefreshQuestGear();
+            }
         }
     }
 }
