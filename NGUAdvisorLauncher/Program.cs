@@ -32,7 +32,7 @@ namespace NGUAdvisorLauncher
                 File.WriteAllText(Path.Combine(low, "injector-path.txt"), injector);
 
                 var psi = new ProcessStartInfo(smi,
-                    "inject -p NGUIdle -a .\\injector\\NGUAdvisorBootstrap.dll -n NGUAdvisorBootstrap -c Boot -m Init")
+                    "inject -p NGUIdle -a .\\injector\\NGUAdvisor.dll -n NGUAdvisor -c Loader -m Init")
                 {
                     WorkingDirectory = dir,
                     UseShellExecute = false

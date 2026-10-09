@@ -497,6 +497,8 @@ namespace NGUAdvisor
                 var exe = FindCompanionExe();
                 if (exe == null) { LogDebug("Companion exe not found; skip auto-launch."); return; }
                 // UseShellExecute=true matches the injector's existing proven Process.Start pattern in the Mono domain.
+                // Direct process launch, no shell indirection. Under Proton/Wine, a shell-based start can
+                // create a bad/invalid window handle and the companion never gets a valid X11 window.
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = exe,
@@ -509,7 +511,9 @@ namespace NGUAdvisor
                     Arguments = System.Diagnostics.Process.GetCurrentProcess().Id.ToString() +
                                 (Managers.AdvisorInstance.Id.Length == 0 ? "" : " " + Managers.AdvisorInstance.Id),
                     WorkingDirectory = Path.GetDirectoryName(exe),
-                    UseShellExecute = true
+                    UseShellExecute = false,
+                    CreateNoWindow = false,
+                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Normal
                 });
                 Log("Auto-launched companion UI.");
             }

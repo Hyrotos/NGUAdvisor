@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -25,32 +24,22 @@ public sealed class MainForm : Form
     private string _pendingLine;             // A6: newest snapshot awaiting the UI thread (Interlocked, not volatile)
     private int _drainPosted;                // A6: 0/1 — a coalescing drain is already queued on the UI thread
 
-    // J4: GetHicon hands out an unmanaged GDI icon handle that Icon.FromHandle does NOT take ownership of.
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyIcon(IntPtr handle);
-
     public MainForm()
     {
         Text = "NGU Advisor";
-        // Window + taskbar icon: build it from the embedded PNG via GetHicon. (new Icon(stream) on a
-        // PNG-encoded .ico is unreliable in GDI+, which is why the window icon didn't take before.)
+        // Proton/Wine can mis-handle raw GDI HICON handles during window creation. Keep the icon if we can,
+        // but avoid the GetHicon/DestroyIcon path entirely because it is the direct source of the invalid
+        // X11 window resource errors.
         try
         {
             using var s = typeof(MainForm).Assembly.GetManifestResourceStream("appicon.png");
             if (s != null)
             {
-                using var bmp = new System.Drawing.Bitmap(s);
-                // Clone into an icon that owns its own copy, then destroy the raw handle. Assigning the
-                // FromHandle icon directly and destroying afterwards would leave the form holding a dead
-                // handle; not destroying at all is the leak (J4).
-                var hIcon = bmp.GetHicon();
-                try
-                {
-                    using var tmp = System.Drawing.Icon.FromHandle(hIcon);
-                    Icon = (System.Drawing.Icon)tmp.Clone();
-                }
-                finally { DestroyIcon(hIcon); }
+                using var iconStream = new MemoryStream();
+                s.CopyTo(iconStream);
+                iconStream.Position = 0;
+                using var ico = new System.Drawing.Icon(iconStream, 32, 32);
+                Icon = (System.Drawing.Icon)ico.Clone();
             }
         }
         catch { /* icon is cosmetic */ }
