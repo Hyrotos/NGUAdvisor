@@ -111,38 +111,74 @@
     <Reference Include="System.Data.DataSetExtensions" />
   </ItemGroup>
 
+  <!--
+    Where the game's Managed folder lives. Nothing machine-specific is committed here; the folder is
+    resolved in this order, first hit wins:
+      1. an explicit NguManagedDir (dotnet build -p:NguManagedDir=..., or NGUAdvisor.csproj.user,
+         which MSBuild imports on its own and .gitignore already excludes)
+      2. the NGU_MANAGED_DIR environment variable
+      3. the usual Steam library locations on Linux and Windows, probed below
+    Forward slashes throughout: MSBuild accepts them on Windows, and backslashes break on Linux.
+  -->
+  <PropertyGroup>
+    <NguManagedDir Condition="'$(NguManagedDir)' == ''">$(NGU_MANAGED_DIR)</NguManagedDir>
+    <_NguManagedRel>steamapps/common/NGU IDLE/NGUIdle_Data/Managed</_NguManagedRel>
+    <_NguProbe>Assembly-CSharp.dll</_NguProbe>
+
+    <!-- Linux: native Steam, the ~/.steam symlink layouts, then Flatpak Steam -->
+    <NguManagedDir Condition="'$(NguManagedDir)' == '' And '$(HOME)' != '' And Exists('$(HOME)/.local/share/Steam/$(_NguManagedRel)/$(_NguProbe)')">$(HOME)/.local/share/Steam/$(_NguManagedRel)</NguManagedDir>
+    <NguManagedDir Condition="'$(NguManagedDir)' == '' And '$(HOME)' != '' And Exists('$(HOME)/.steam/steam/$(_NguManagedRel)/$(_NguProbe)')">$(HOME)/.steam/steam/$(_NguManagedRel)</NguManagedDir>
+    <NguManagedDir Condition="'$(NguManagedDir)' == '' And '$(HOME)' != '' And Exists('$(HOME)/.steam/root/$(_NguManagedRel)/$(_NguProbe)')">$(HOME)/.steam/root/$(_NguManagedRel)</NguManagedDir>
+    <NguManagedDir Condition="'$(NguManagedDir)' == '' And '$(HOME)' != '' And Exists('$(HOME)/.var/app/com.valvesoftware.Steam/.local/share/Steam/$(_NguManagedRel)/$(_NguProbe)')">$(HOME)/.var/app/com.valvesoftware.Steam/.local/share/Steam/$(_NguManagedRel)</NguManagedDir>
+
+    <!-- Windows: the default Steam install, then a SteamLibrary folder on the common drive letters -->
+    <NguManagedDir Condition="'$(NguManagedDir)' == '' And '$(OS)' == 'Windows_NT' And Exists('$(MSBuildProgramFiles32)/Steam/$(_NguManagedRel)/$(_NguProbe)')">$(MSBuildProgramFiles32)/Steam/$(_NguManagedRel)</NguManagedDir>
+    <NguManagedDir Condition="'$(NguManagedDir)' == '' And '$(OS)' == 'Windows_NT' And Exists('C:/SteamLibrary/$(_NguManagedRel)/$(_NguProbe)')">C:/SteamLibrary/$(_NguManagedRel)</NguManagedDir>
+    <NguManagedDir Condition="'$(NguManagedDir)' == '' And '$(OS)' == 'Windows_NT' And Exists('D:/SteamLibrary/$(_NguManagedRel)/$(_NguProbe)')">D:/SteamLibrary/$(_NguManagedRel)</NguManagedDir>
+    <NguManagedDir Condition="'$(NguManagedDir)' == '' And '$(OS)' == 'Windows_NT' And Exists('E:/SteamLibrary/$(_NguManagedRel)/$(_NguProbe)')">E:/SteamLibrary/$(_NguManagedRel)</NguManagedDir>
+    <NguManagedDir Condition="'$(NguManagedDir)' == '' And '$(OS)' == 'Windows_NT' And Exists('F:/SteamLibrary/$(_NguManagedRel)/$(_NguProbe)')">F:/SteamLibrary/$(_NguManagedRel)</NguManagedDir>
+
+    <NguManagedDir Condition="'$(NguManagedDir)' != ''">$([MSBuild]::EnsureTrailingSlash('$(NguManagedDir)'))</NguManagedDir>
+  </PropertyGroup>
+
+  <!-- Fail with the fix spelled out, rather than with a wall of CS0246 for every game type. -->
+  <Target Name="CheckNguManagedDir" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(NguManagedDir)' == '' Or !Exists('$(NguManagedDir)$(_NguProbe)')"
+           Text="NGU Idle's Managed folder was not found (looked for $(_NguProbe) in '$(NguManagedDir)'). Point the build at &lt;steam library&gt;/$(_NguManagedRel): set the NGU_MANAGED_DIR environment variable, or pass -p:NguManagedDir=&lt;path&gt;. See BUILD.md." />
+  </Target>
+
   <ItemGroup>
     <!--
-      NGU Idle game assemblies (Unity 2019.4 / Mono). Machine-specific paths.
+      NGU Idle game assemblies (Unity 2019.4 / Mono), resolved from NguManagedDir above.
       Private=false: these are compile-time references only; never copy them to output.
     -->
     <Reference Include="Assembly-CSharp">
-      <HintPath>/home/hyrotos/.local/share/Steam/steamapps/common/NGU IDLE/NGUIdle_Data/Managed/Assembly-CSharp.dll</HintPath>
+      <HintPath>$(NguManagedDir)Assembly-CSharp.dll</HintPath>
       <SpecificVersion>False</SpecificVersion>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine">
-      <HintPath>/home/hyrotos/.local/share/Steam/steamapps/common/NGU IDLE/NGUIdle_Data/Managed/UnityEngine.dll</HintPath>
+      <HintPath>$(NguManagedDir)UnityEngine.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
-      <HintPath>/home/hyrotos/.local/share/Steam/steamapps/common/NGU IDLE/NGUIdle_Data/Managed/UnityEngine.CoreModule.dll</HintPath>
+      <HintPath>$(NguManagedDir)UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine.IMGUIModule">
-      <HintPath>/home/hyrotos/.local/share/Steam/steamapps/common/NGU IDLE/NGUIdle_Data/Managed/UnityEngine.IMGUIModule.dll</HintPath>
+      <HintPath>$(NguManagedDir)UnityEngine.IMGUIModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine.InputLegacyModule">
-      <HintPath>/home/hyrotos/.local/share/Steam/steamapps/common/NGU IDLE/NGUIdle_Data/Managed/UnityEngine.InputLegacyModule.dll</HintPath>
+      <HintPath>$(NguManagedDir)UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine.JSONSerializeModule">
-      <HintPath>/home/hyrotos/.local/share/Steam/steamapps/common/NGU IDLE/NGUIdle_Data/Managed/UnityEngine.JSONSerializeModule.dll</HintPath>
+      <HintPath>$(NguManagedDir)UnityEngine.JSONSerializeModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine.UI">
-      <HintPath>/home/hyrotos/.local/share/Steam/steamapps/common/NGU IDLE/NGUIdle_Data/Managed/UnityEngine.UI.dll</HintPath>
+      <HintPath>$(NguManagedDir)UnityEngine.UI.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

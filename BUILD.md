@@ -4,9 +4,12 @@
 - **.NET SDK** (9.x is fine) — installed via `winget install Microsoft.DotNet.SDK.9`.
   No Visual Studio needed; net48 reference assemblies come from the
   `Microsoft.NETFramework.ReferenceAssemblies` NuGet package.
-- **NGU Idle installed** (Unity 2019.4 / Mono). The `.csproj` references its assemblies at:
-  `D:\SteamLibrary\steamapps\common\NGU IDLE\NGUIdle_Data\Managed\`
-  If your install path differs, update the `<HintPath>` entries in `NGUAdvisor/NGUAdvisor.csproj`.
+- **NGU Idle installed** (Unity 2019.4 / Mono). The `.csproj` references the assemblies in
+  `<steam library>/steamapps/common/NGU IDLE/NGUIdle_Data/Managed/` and finds that folder on its
+  own in the usual Steam locations on Linux (`~/.local/share/Steam`, `~/.steam/steam`, Flatpak) and
+  Windows (`Program Files (x86)\Steam`, `SteamLibrary` on `C:`–`F:`).
+  If your library is somewhere else, point the build at the `Managed` folder with the
+  `NGU_MANAGED_DIR` environment variable or `-p:NguManagedDir=<path>`.
 
 ## Why net48 (do not "upgrade")
 The DLL is injected into NGU Idle's Unity 2019.4 **Mono (.NET 4.x)** runtime and must be a
