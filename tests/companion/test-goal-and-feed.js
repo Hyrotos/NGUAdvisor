@@ -168,9 +168,11 @@ setTimeout(() => {
   // say "Autokill unlocks at 100%" under bars scaled to the manual first-kill stats.
   send({ instruments: { titan: { known: true, name: "T2 v1", stage: "first kill", atk: 72, def: 34 } }, goal: {} });
   ok("first kill: heading names the rung", $("titanStageLabel").textContent === "First-kill readiness", $("titanStageLabel").textContent);
+  ok("first kill: the overview tile names the same rung", /manual first kill/.test($("instTitanVerdict").textContent) && !/Autokill/.test($("instTitanVerdict").textContent), $("instTitanVerdict").textContent);
   ok("first kill: verdict does not promise autokill", /manual first kill/.test($("titanVerdict").textContent) && !/Autokill/.test($("titanVerdict").textContent), $("titanVerdict").textContent);
 
   send({ instruments: { titan: { known: true, name: "T2 v1", stage: "idle", atk: 72, def: 34 } }, goal: {} });
+  ok("idle: the overview tile names the same rung", /Idle kills/.test($("instTitanVerdict").textContent), $("instTitanVerdict").textContent);
   ok("idle: heading names the rung", $("titanStageLabel").textContent === "Idle-kill readiness", $("titanStageLabel").textContent);
   ok("idle: verdict names idle kills", /^Idle kills/.test($("titanVerdict").textContent), $("titanVerdict").textContent);
 

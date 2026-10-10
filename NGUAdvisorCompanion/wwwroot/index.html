@@ -1377,7 +1377,7 @@
               <div class="r"><span class="n">Atk</span><div class="track" role="progressbar" aria-label="Titan attack readiness" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:0%"></div></div><span class="p">—</span></div>
               <div class="r"><span class="n">Def</span><div class="track" role="progressbar" aria-label="Titan defence readiness" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:0%"></div></div><span class="p">—</span></div>
             </div>
-            <div class="verdict" style="margin-top:11px">Autokill unlocks at <b style="color:var(--muted)">100%</b> of both attack and defence.</div>
+            <div class="verdict" id="instTitanVerdict" style="margin-top:11px">Autokill unlocks at <b style="color:var(--muted)">100%</b> of both attack and defence.</div>
           </div>
           <div class="tile" style="grid-column: span 2;">
             <div class="th"><span class="name">Boost farm · zone vs ITOPOD</span><span class="badge ok" id="boostBadge">—</span></div>
@@ -3404,6 +3404,8 @@
     var tLead = tStage==="first kill" ? "A manual first kill is in reach at "
               : tStage==="idle" ? "Idle kills are in reach at " : "Autokill unlocks at ";
     setText($("titanStageLabel"), tLbl);
+    // The overview's titan tile shows the same two bars, so it names the same rung.
+    writeHtml($("instTitanVerdict"), "instTitanVerdict", tLead+'<b style="color:var(--muted)">100%</b> of both attack and defence.');
     writeHtml($("titanVerdict"), "titanVerdict", tLead+'<b style="color:var(--muted)">100%</b> of every '+(tStage==="first kill"||tStage==="idle"?"bar":"gate")+' shown.');
     // Compliance: when the user is already adventuring in the recommended boost zone, every boost
     // status badge (nav dot, dashboard card, system-view readout) flips warn/"Suggest" -> ok/"On target".
