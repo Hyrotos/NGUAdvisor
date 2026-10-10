@@ -1442,8 +1442,10 @@ namespace NGUAdvisor.Managers
                 {
                     b["best"] = v.BestName ?? "";
                     b["bestZone"] = v.BestZone;
-                    b["bestRate"] = Num(Math.Round(v.BestRate, 0));
-                    b["itopodRate"] = Num(Math.Round(v.ItopodRate, 0));
+                    // Not rounded to whole numbers: early zones are worth well under 1 per kill, and
+                    // the page keeps the decimals below 10 (fmtRate).
+                    b["bestRate"] = Num(Math.Round(v.BestRate, 4));
+                    b["itopodRate"] = Num(Math.Round(v.ItopodRate, 4));
                     b["currentZone"] = v.CurrentZone;
                     b["compliant"] = v.Compliant;
                     if (!string.IsNullOrEmpty(v.Text)) b["text"] = v.Text;

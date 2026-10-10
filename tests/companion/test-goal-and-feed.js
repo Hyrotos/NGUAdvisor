@@ -141,6 +141,18 @@ setTimeout(() => {
     ok("a finished list says so", $("apNext").textContent === "Tier list complete" && /Everything on the tier list is bought/.test(list().textContent), list().textContent);
   }
 
+  // Boost-value/kill under 10 keeps its decimals: early zones are all "0 point something", and a
+  // rounded integer printed 0 for every one of them.
+  {
+    const cmp = (best, itopod) => {
+      send({ goal: {}, instruments: { boostFarm: { known: true, best: "Clock Dimension", bestZone: 7, bestRate: best, itopodRate: itopod, currentZone: 7, compliant: true } } });
+      return Array.from($("boostCmp").querySelectorAll(".rate")).map(e => e.textContent).join(" | ");
+    };
+    ok("below 1 shows two significant figures", cmp(0.4231, 0.0042) === "~0.42 / kill | ~0.0042 / kill", cmp(0.4231, 0.0042));
+    ok("1 to 10 shows one decimal", cmp(3.14159, 9.44) === "~3.1 / kill | ~9.4 / kill", cmp(3.14159, 9.44));
+    ok("10 and up is unchanged, and so is zero", cmp(12.4, 2600) === "~12 / kill | ~2.6K / kill" && cmp(0, 0) === "~0 / kill | ~0 / kill", cmp(12.4, 2600));
+  }
+
   // An affordable AP buy reaches the overview as an advisor card that opens the AP page.
   send({ goal: {}, actions: [
     { system: "Power", text: "Push the titan", severity: 2 },

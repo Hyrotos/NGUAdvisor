@@ -2542,10 +2542,14 @@
   function setFill(el, pct, cls){ if(!el) return; el.className = "fill"+(cls?(" "+cls):""); el.style.width = clampPct(pct)+"%"; }
   function syncBars(){ var ls=document.querySelectorAll('[role="progressbar"]'); for(var i=0;i<ls.length;i++){ var t=ls[i], f=t.querySelector(".fill"); if(!f) continue; var v=f.getAttribute("data-w"); if(v==null) v=parseInt(f.style.width,10); v=isNaN(+v)?0:Math.round(+v); t.setAttribute("aria-valuenow", v); } }
   // fmtRate is a COMPARISON format, not a reading format: it exists so two boost-value/kill figures can
-  // be set side by side in a sentence ("~2.6K vs ITOPOD ~1.9K"), where one significant decimal is the
+  // be set side by side in a sentence ("~2.6K vs ITOPOD ~1.9K", "~0.42 vs ~0.31"), where one significant decimal is the
   // point. It is not the number policy below and the two are not in competition.
   function fmtRate(v){ if(typeof v!=="number"||!isFinite(v)) return "—"; var a=Math.abs(v);
-    if(a>=1e6) return (v/1e6).toFixed(1)+"M"; if(a>=1e3) return (v/1e3).toFixed(1)+"K"; return Math.round(v).toString(); }
+    if(a>=1e6) return (v/1e6).toFixed(1)+"M"; if(a>=1e3) return (v/1e3).toFixed(1)+"K";
+    // Under 10 a rounded integer says "0" for every early zone and the comparison is gone; keep the
+    // decimals there (two significant figures below 1, so 0.004 does not collapse to 0.00 either).
+    if(a>=10 || a===0) return Math.round(v).toString();
+    return a>=1 ? v.toFixed(1) : String(+v.toPrecision(2)); }
 
   /* ======================== THE number policy for read-off values ========================
      The growth strip and the NGU-rate tile printed `growth[].fmt`, the string the injector had already
