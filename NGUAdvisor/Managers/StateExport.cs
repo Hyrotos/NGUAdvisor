@@ -99,6 +99,7 @@ namespace NGUAdvisor.Managers
 
             Section(sb, "PROGRESSION", () => Progression(sb, c));
             Section(sb, "RESOURCES", () => Resources(sb, c));
+            Section(sb, "EXP WALK", () => { foreach (var line in ExpBalancer.Describe(0.10)) sb.AppendLine(line); });
             Section(sb, "NGU — ENERGY", () => Ngus(sb, c, false));
             Section(sb, "NGU — MAGIC", () => Ngus(sb, c, true));
             Section(sb, "ADVANCED TRAINING", () => AdvancedTraining(sb, c));

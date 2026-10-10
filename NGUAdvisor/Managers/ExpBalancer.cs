@@ -154,6 +154,41 @@ namespace NGUAdvisor.Managers
 
         private static double Level(Stat s) => s.TargetShare > 0 ? s.ExpSpent / s.TargetShare : 0;
 
+        // The walk as it stands, one line per stat, most-behind first, and what the next tick would
+        // do with the bank -- for the state export. "level" is EXP invested over target share: the
+        // quantity the walk levels out, so equal levels mean the account is on the ratio.
+        public static List<string> Describe(double fraction)
+        {
+            var lines = new List<string>();
+            try
+            {
+                var c = Main.Character;
+                if (c == null || c.highestBoss < 17) { lines.Add("  custom purchases are not unlocked yet (boss 17)"); return lines; }
+                var stats = new List<Stat>(Snapshot(c));
+                stats.Sort((a, b) => Level(a).CompareTo(Level(b)));
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                Stat? first = null;
+                foreach (var s in stats)
+                {
+                    bool live = s.Buyable && s.TargetShare > 0;
+                    if (live && first == null) first = s;
+                    lines.Add(string.Format(inv, "  {0,-13} invested {1,12:#,0} EXP  share {2,5:0.0}%  level {3,14:#,0}  unit {4,3:0} EXP{5}",
+                        s.Name, s.ExpSpent, s.TargetShare * 100, Level(s), UnitCost(s.Name),
+                        live ? "" : s.TargetShare <= 0 ? "  (no share at this stage)" : "  (not buyable yet)"));
+                }
+                if (first == null) { lines.Add("  nothing is buyable"); return lines; }
+                long budget;
+                var step = ExpRatio.WalkStep(c.realExp, fraction, UnitCost(first.Value.Name), out budget);
+                lines.Add(step == ExpRatio.Step.Wait
+                    ? string.Format(inv, "  next          WAIT — saving for one unit of {0} ({1:0} EXP, bank {2:#,0})", first.Value.Name, UnitCost(first.Value.Name), c.realExp)
+                    : step == ExpRatio.Step.MostBehindOnly
+                        ? string.Format(inv, "  next          {0} alone, {1:#,0} EXP — the bank is too small to spread", first.Value.Name, budget)
+                        : string.Format(inv, "  next          {0:#,0} EXP spread over the stats furthest behind, starting with {1}", budget, first.Value.Name));
+            }
+            catch (Exception e) { lines.Add("  (unavailable — " + e.Message + ")"); }
+            return lines;
+        }
+
         public static Verdict Analyze()
         {
             var v = new Verdict();
@@ -268,27 +303,17 @@ namespace NGUAdvisor.Managers
 
                 elig.Sort((a, b) => Level(a).CompareTo(Level(b)));   // ascending by level
 
-                // Budget is `fraction` of the bank, but never a DEAD ZONE. The old flat "under 100 EXP,
-                // skip" floor made small banks permanently unspendable: 510 EXP x 10% = 51, so the tick
-                // bought nothing, every minute -- and because nothing was ever spent, a bank that only
-                // trickles in sat there untouched (user-reported 2026-10-09). Waiting buys nothing (a
-                // purchase is an instant, permanent stat), so the floor is one unit, clamped to the bank.
-                //
-                // One unit of a stat that is BEHIND, though, not simply the cheapest unit on offer: cap
-                // costs 1 EXP, so a cheapest-unit floor would drip every small bank into cap forever,
-                // however far ahead cap already is, and never save up the 150 a point of power costs.
-                var behind = Behind(elig);
-                double cheapest = double.MaxValue;
-                foreach (var s in behind)
+                // What this tick does is ExpRatio.WalkStep's call -- wait, buy the most-behind stat
+                // alone, or waterfill -- and the reasoning for each is there, where it is tested.
+                var mostBehind = elig[0];
+                long budget;
+                var step = ExpRatio.WalkStep(c.realExp, fraction, UnitCost(mostBehind.Name), out budget);
+                if (step == ExpRatio.Step.Wait) return null;
+                if (step == ExpRatio.Step.MostBehindOnly)
                 {
-                    double u = UnitCost(s.Name);
-                    if (u < cheapest) cheapest = u;
+                    long one = BuyStat(c, mostBehind.Name, budget);
+                    return one > 0 ? $"{mostBehind.Name} for {Fmt(one)} EXP (the stat furthest behind)" : null;
                 }
-                double budgetD = Math.Max(c.realExp * fraction, cheapest);
-                if (budgetD > c.realExp) budgetD = c.realExp;
-                if (budgetD > long.MaxValue) budgetD = long.MaxValue;
-                long budget = (long)budgetD;
-                if (budget < cheapest) return null;   // cannot afford one unit of anything that is behind yet
 
                 // Waterfill: raise the floor across the lowest levels until the budget runs out.
                 double remaining = budget;
@@ -325,16 +350,10 @@ namespace NGUAdvisor.Managers
                 }
                 if (total <= 0)
                 {
-                    // The waterfill can slice a small budget into per-stat crumbs that each round down
-                    // to zero units (150 EXP for one Energy POWER, split three ways, buys none). Rather
-                    // than buy nothing, put the whole budget on the most-lagging stat it can afford a
-                    // unit of -- still a step toward the ratio, just one stat at a time.
-                    foreach (var s in behind)
-                    {
-                        if (UnitCost(s.Name) > budget) continue;
-                        long spent = BuyStat(c, s.Name, budget);
-                        if (spent > 0) { total = spent; fed.Add(s.Name); break; }
-                    }
+                    // The waterfill can still slice the budget into per-stat crumbs that each round
+                    // down to zero units; then the whole budget goes to the stat furthest behind.
+                    long whole = BuyStat(c, mostBehind.Name, budget);
+                    if (whole > 0) { total = whole; fed.Add(mostBehind.Name); }
                 }
                 if (total <= 0) return null;
                 return $"{string.Join(", ", fed.ToArray())} for {Fmt(total)} EXP (walking toward ratio)";
@@ -343,19 +362,6 @@ namespace NGUAdvisor.Managers
         }
 
         // Replicates the game's buyCustom* math for one stat, spending at most maxExp. Returns EXP spent.
-        // The stats still below the leader, most-behind first (`elig` is sorted ascending by level).
-        // When everything is level -- an exactly balanced account -- every stat counts as behind,
-        // so a balanced bank is still spent rather than held.
-        private static List<Stat> Behind(List<Stat> elig)
-        {
-            double top = double.MinValue;
-            foreach (var s in elig) top = Math.Max(top, Level(s));
-            var behind = new List<Stat>();
-            foreach (var s in elig)
-                if (Level(s) < top * (1 - 1e-9)) behind.Add(s);
-            return behind.Count > 0 ? behind : elig;
-        }
-
         // What one purchasable unit of a stat costs, in EXP -- the same constants BuyStat divides by.
         private static double UnitCost(string name)
         {
