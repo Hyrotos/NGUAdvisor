@@ -3224,12 +3224,12 @@
   }
 
   // SYS2VIEW inverts RECSYS (Rec.System -> view id) so the hero can offer "Open <system> ->".
-  // All 14 Rec.System values must be here: an unmapped one renders the card with no "Open ->" at all,
+  // All 15 Rec.System values must be here: an unmapped one renders the card with no "Open ->" at all,
   // and nothing indicates it's missing. Perks and Quirks share the one "Perks & Quirks" view.
   var SYS2VIEW = { Power:"titans", Gear:"gear", Wandoos:"wandoos", ITOPOD:"adventure",
     Diggers:"diggers", Beards:"beards", Yggdrasil:"yggdrasil", EXP:"exp",
     Gold:"gold", Blood:"blood", NGUs:"ngu", LSC:"challenges",
-    Perks:"perks", Quirks:"perks", Hacks:"resources" };
+    Perks:"perks", Quirks:"perks", Hacks:"resources", AP:"ap" };
   function actionsSorted(s){
     var acts=(s.actions||[]).filter(function(a){ return !a.optimal && (a.severity||0)>=1; });
     acts.sort(function(a,b){ return (b.severity||0)-(a.severity||0); });

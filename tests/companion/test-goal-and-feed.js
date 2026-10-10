@@ -141,6 +141,17 @@ setTimeout(() => {
     ok("a finished list says so", $("apNext").textContent === "Tier list complete" && /Everything on the tier list is bought/.test(list().textContent), list().textContent);
   }
 
+  // An affordable AP buy reaches the overview as an advisor card that opens the AP page.
+  send({ goal: {}, actions: [
+    { system: "Power", text: "Push the titan", severity: 2 },
+    { system: "AP", text: "Buy Red Heart (25,000 AP, have 30,000)", severity: 1 } ] });
+  {
+    const card = Array.from($("needs").querySelectorAll(".act")).find(a => /Buy Red Heart/.test(a.textContent));
+    ok("the AP buy is listed under also worth doing", !!card, $("needs").textContent);
+    ok("and opens the AP page", !!card && card.querySelector('.go[data-view="ap"]') !== null, card ? card.innerHTML : "");
+  }
+  send({ goal: {}, actions: [] });
+
   // The Titans view's heading and verdict name the rung the bars are measured against. They used to
   // say "Autokill unlocks at 100%" under bars scaled to the manual first-kill stats.
   send({ instruments: { titan: { known: true, name: "T2 v1", stage: "first kill", atk: 72, def: 34 } }, goal: {} });

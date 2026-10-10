@@ -444,6 +444,21 @@ namespace NGUAdvisor.Managers
             }
             catch (Exception ex) { Main.LogDebug($"Advisor rec failed: {ex.Message}"); }
 
+            // AP - advice only, and only once the next tier-list row can be paid for. While the bank
+            // is still filling there is nothing to do, so the overview stays quiet.
+            try
+            {
+                var ab = ApPurchaseAdvisor.Next();
+                if (ab.Known && ab.Affordable)
+                    list.Add(new Rec
+                    {
+                        System = "AP",
+                        Text = $"Buy {ab.Item.Name} ({ab.Cost.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)} AP, have {ab.Balance.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)}) — yours to buy, the advisor never spends AP",
+                        Severity = 1
+                    });
+            }
+            catch (Exception ex) { Main.LogDebug($"Advisor rec failed: {ex.Message}"); }
+
             // GOLD — titan gold banking status. Auto mode targets the highest AK-able titan itself
             // (its drop dwarfs all lower titans) and re-banks when the AK version rises.
             try
