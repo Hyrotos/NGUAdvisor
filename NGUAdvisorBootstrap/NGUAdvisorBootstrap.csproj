@@ -7,6 +7,15 @@
     <RootNamespace>NGUAdvisorBootstrap</RootNamespace>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
+    <!-- Keep the DLL BYTE-IDENTICAL for as long as its source does not change. The advisor compares
+         this file's timestamp with when the session injected its copy and warns BOOTSTRAP IS STALE
+         when the file is newer (BuildStamp.IsBootstrapStale); the packager keeps the old timestamp
+         only for a byte-identical file. Three things otherwise change the bytes with no source
+         change: the git HEAD sha in the informational version, a non-deterministic build, and the
+         debug-directory entry that points at a freshly generated PDB. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <Deterministic>true</Deterministic>
+    <DebugType>none</DebugType>
   </PropertyGroup>
 
   <ItemGroup>

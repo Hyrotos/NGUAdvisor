@@ -88,6 +88,12 @@ dotnet9 publish "$ROOT/NGUAdvisorCompanion/NGUAdvisorCompanion.csproj" \
 
 # Stage the same runtime layout as the Windows packager.
 echo "==> Staging $STAGE ..."
+# Keep the bootstrap that is already staged, so an unchanged one can keep its timestamp (below).
+PREV_BOOTSTRAP=""
+if [ -f "$STAGE/injector/NGUAdvisorBootstrap.dll" ]; then
+  PREV_BOOTSTRAP="$(mktemp)"
+  cp -p "$STAGE/injector/NGUAdvisorBootstrap.dll" "$PREV_BOOTSTRAP"
+fi
 rm -rf "$STAGE" "$ZIP"
 mkdir -p "$STAGE/injector"
 
@@ -113,7 +119,19 @@ BAT
 } | sed 's/$/\r/' > "$STAGE/Run NGU Advisor.bat"
 
 cp "$DLL" "$STAGE/injector/NGUAdvisor.dll"
-if [ "$HOT_RELOAD" = 1 ]; then cp "$BOOTSTRAP" "$STAGE/injector/NGUAdvisorBootstrap.dll"; fi
+# The advisor reads the staged bootstrap's timestamp to tell whether the one on disk is newer than
+# the copy the running session injected (BuildStamp.IsBootstrapStale), and warns BOOTSTRAP IS STALE
+# if so. So a bootstrap whose BYTES have not changed must keep its old timestamp: a plain copy
+# stamps "now" on every run, and MSBuild re-emits the file after a commit even when nothing in it
+# changed. Byte-identical to what was staged before -> put that file back, timestamp and all.
+if [ "$HOT_RELOAD" = 1 ]; then
+  if [ -n "$PREV_BOOTSTRAP" ] && cmp -s "$PREV_BOOTSTRAP" "$BOOTSTRAP"; then
+    cp -p "$PREV_BOOTSTRAP" "$STAGE/injector/NGUAdvisorBootstrap.dll"
+  else
+    cp -p "$BOOTSTRAP" "$STAGE/injector/NGUAdvisorBootstrap.dll"
+  fi
+fi
+[ -z "$PREV_BOOTSTRAP" ] || rm -f "$PREV_BOOTSTRAP"
 cp "$TOOLS/SharpMonoInjector.dll" "$TOOLS/smi.exe" "$STAGE/injector/"
 cp -r "$PROFILES" "$STAGE/sampleprofiles"
 cp "$LAUNCHER" "$STAGE/Advisor Launcher.exe"
