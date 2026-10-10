@@ -6807,6 +6807,19 @@
 
   function applySnapshot(s){
     if(!s || typeof s!=="object") return;
+    // A HOT RELOAD SWAPS THE ADVISOR UNDER THIS PAGE. The companion window stays open across it, so
+    // without this the new advisor would be driven by the OLD page — and its UI files have usually
+    // changed in the same build. The first build tag seen is remembered; a different one means a new
+    // advisor is talking, and the page reloads itself from disk once. The host re-sends the newest
+    // snapshot when navigation completes, so nothing is lost but an open, unsaved editor.
+    if(typeof s.buildTag==="string" && s.buildTag){
+      if(window._buildTag===undefined) window._buildTag = s.buildTag;
+      else if(window._buildTag!==s.buildTag && !window._reloading){
+        window._reloading = true;
+        try{ window.location.reload(); }catch(e){}
+        return;
+      }
+    }
     if(s.notice) window.showToast(s.notice, s.noticeCopy);   // one-shot outcome of a button action (advisor emits once, then clears)
     // A1: the pipe's own state can only ever force `down` (immediately — no watchdog wait) or re-arm
     // the wait for a first snapshot. It can NOT declare us live: that's what snapshot arrivals do.

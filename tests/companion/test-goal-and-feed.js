@@ -338,6 +338,17 @@ setTimeout(() => {
   ok("drawer is wider than the original 400px",
      /\.drawer\s*\{[^}]*width:\s*min\(\s*8\d\dpx/.test(css));
 
+  // ---------- hot reload: a new advisor build reloads the page, once ----------
+  // jsdom cannot navigate, so the reload itself is not observable here; the latch that guards it is.
+  send({ buildTag: "261010-1000", instruments: {}, goal: {} });
+  ok("the first build tag is remembered, not acted on", window._buildTag === "261010-1000" && !window._reloading);
+  send({ buildTag: "261010-1000", instruments: {}, goal: {} });
+  ok("the same build does not reload", !window._reloading);
+  send({ instruments: {}, goal: {} });
+  ok("a snapshot without a tag (older advisor) does not reload", !window._reloading);
+  send({ buildTag: "261010-1030", instruments: {}, goal: {} });
+  ok("a different build tag triggers the reload", window._reloading === true);
+
   // ---------- regression: drawer still opens ----------
   $("logbtn").dispatchEvent(new window.Event("click", { bubbles: true }));
   ok("drawer opens", $("drawer").classList.contains("open"));

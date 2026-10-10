@@ -7,6 +7,12 @@
 # Usage:
 #   ./package-release-linux.sh
 #   ./package-release-linux.sh 2.4.1
+#   ./package-release-linux.sh --no-hot-reload [version]
+#
+# By default the package carries NGUAdvisorBootstrap.dll, and the launcher injects that instead of
+# the advisor itself. The bootstrap byte-loads NGUAdvisor.dll and can load a newer one into the same
+# game session, so after a rebuild "Hot-reload advisor" (F5) picks it up without restarting NGU Idle.
+# --no-hot-reload leaves it out and gives the plain direct-inject layout of a public release.
 #   NGU_RUNTIME=/path/to/NGU NGU_TOOLS=/path/to/NGU/injector ./package-release-linux.sh
 
 set -euo pipefail
@@ -28,6 +34,9 @@ SDK9_DLL="$DOTNET_ROOT/sdk/$SDK9_VERSION/dotnet.dll"
 dotnet9() { "$DOTNET_BIN" "$SDK9_DLL" "$@"; }
 
 command -v 7z >/dev/null || { echo "ERROR: 7z is required to create the release ZIP (install p7zip)" >&2; exit 1; }
+
+HOT_RELOAD=1
+if [ "${1:-}" = "--no-hot-reload" ]; then HOT_RELOAD=0; shift; fi
 
 VERSION="${1:-$(grep -oE 'Version = "[^"]+"' "$ROOT/NGUAdvisor/Main.cs" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')}"
 [ -n "$VERSION" ] || { echo "ERROR: could not determine version" >&2; exit 1; }
@@ -63,6 +72,13 @@ dotnet9 build "$ROOT/NGUAdvisorLauncher/NGUAdvisorLauncher.csproj" -c Release -v
 LAUNCHER="$ROOT/NGUAdvisorLauncher/bin/Release/net48/Advisor Launcher.exe"
 [ -f "$LAUNCHER" ] || { echo "ERROR: launcher build produced no 'Advisor Launcher.exe'" >&2; exit 1; }
 
+if [ "$HOT_RELOAD" = 1 ]; then
+  echo '==> Building hot-reload bootstrap (Release)...'
+  dotnet9 build "$ROOT/NGUAdvisorBootstrap/NGUAdvisorBootstrap.csproj" -c Release -v quiet
+  BOOTSTRAP="$ROOT/NGUAdvisorBootstrap/bin/Release/net48/NGUAdvisorBootstrap.dll"
+  [ -f "$BOOTSTRAP" ] || { echo 'ERROR: bootstrap build produced no NGUAdvisorBootstrap.dll' >&2; exit 1; }
+fi
+
 echo '==> Publishing Companion (Release, self-contained win-x64)...'
 COMPANION_PUB="$ROOT/NGUAdvisorCompanion/bin/Release/net8.0-windows/win-x64/publish"
 rm -rf "$COMPANION_PUB"
@@ -84,13 +100,20 @@ pushd "%~dp0"
 if not exist "%USERPROFILE%\AppData\LocalLow\NGUAdvisor" mkdir "%USERPROFILE%\AppData\LocalLow\NGUAdvisor"
 <nul set /p="%~dp0injector" > "%USERPROFILE%\AppData\LocalLow\NGUAdvisor\injector-path.txt"
 
-.\injector\smi.exe inject -p NGUIdle -a .\injector\NGUAdvisor.dll -n NGUAdvisor -c Loader -m Init
+rem With the hot-reload bootstrap in the package, inject that: it loads NGUAdvisor.dll itself and
+rem can load a newer build into the same game session (Hot-reload advisor / F5).
+if exist ".\injector\NGUAdvisorBootstrap.dll" (
+  .\injector\smi.exe inject -p NGUIdle -a .\injector\NGUAdvisorBootstrap.dll -n NGUAdvisorBootstrap -c Boot -m Init
+) else (
+  .\injector\smi.exe inject -p NGUIdle -a .\injector\NGUAdvisor.dll -n NGUAdvisor -c Loader -m Init
+)
 
 popd
 BAT
 } | sed 's/$/\r/' > "$STAGE/Run NGU Advisor.bat"
 
 cp "$DLL" "$STAGE/injector/NGUAdvisor.dll"
+if [ "$HOT_RELOAD" = 1 ]; then cp "$BOOTSTRAP" "$STAGE/injector/NGUAdvisorBootstrap.dll"; fi
 cp "$TOOLS/SharpMonoInjector.dll" "$TOOLS/smi.exe" "$STAGE/injector/"
 cp -r "$PROFILES" "$STAGE/sampleprofiles"
 cp "$LAUNCHER" "$STAGE/Advisor Launcher.exe"
@@ -108,7 +131,9 @@ if ! tr -d '\000' < "$STAGE/Advisor Launcher.exe" | grep -a 'injector-path.txt' 
   exit 1
 fi
 
-FORBIDDEN="$(find "$STAGE" \( -iname '*Bootstrap*' -o -iname 'Assembly-CSharp.dll' -o -iname '*.bak*' -o -iname '*.orig' \) -print)"
+# The bootstrap is forbidden exactly when this run was asked to leave it out.
+FORBIDDEN="$(find "$STAGE" \( -iname 'Assembly-CSharp.dll' -o -iname '*.bak*' -o -iname '*.orig' \) -print)"
+if [ "$HOT_RELOAD" = 0 ]; then FORBIDDEN="$FORBIDDEN$(find "$STAGE" -iname '*Bootstrap*' -print)"; fi
 if [ -n "$FORBIDDEN" ]; then
   echo 'ERROR: forbidden file staged:' >&2
   printf '%s\n' "$FORBIDDEN" >&2

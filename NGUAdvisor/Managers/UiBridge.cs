@@ -1921,6 +1921,9 @@ namespace NGUAdvisor.Managers
 
             // --- log directory: the companion reads the advisor's log files directly for the log drawer. ---
             Safe("logDir", () => { root["logDir"] = Main.GetLogDir(); });
+            // Which build is talking. A hot reload swaps the advisor under a companion that stays
+            // open, so the page uses a CHANGE in this to reload itself and pick up the new UI files.
+            Safe("buildTag", () => { root["buildTag"] = Main.BuildTag; });
 
             // --- one-shot notice: outcome of the last button action (e.g. Re-optimize gear now). Emit once
             //     then clear so the companion toasts it exactly once. Same thread as the command drain. ---

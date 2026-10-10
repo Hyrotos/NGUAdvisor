@@ -46,5 +46,23 @@ Copy the built `NGUAdvisor.r<timestamp>.dll` over `injector/NGUAdvisor.dll` in y
 folder, keeping the existing `smi.exe` and `SharpMonoInjector.dll`. Then run `Run NGU Advisor.bat`
 with NGU Idle open — it injects `NGUAdvisor.dll` directly (`NGUAdvisor.Loader.Init`).
 
+## Hot reload (iterating without restarting the game)
+`package-release-linux.sh` ships `injector/NGUAdvisorBootstrap.dll` by default, and the launcher
+injects that instead of the advisor when it is present. The bootstrap loads `NGUAdvisor.dll` from
+bytes, so a newer build can be loaded into the same game session:
+
+1. Start NGU Idle and launch the advisor once (this is the only start that needs the game restarted,
+   if an advisor without the bootstrap was already injected).
+2. Rebuild with `./package-release-linux.sh`.
+3. Press **F5** in the game, or **Hot-reload advisor** in the companion's settings.
+
+The bootstrap unloads the running advisor and loads the DLL now on disk; `logs/bootstrap.log` records
+each step. The companion window stays open and reloads its page when it sees the new build. A change
+to the companion *executable* still needs the window closed and reopened. The old assembly stays in
+memory until the game exits (a few MB per reload).
+
+`./package-release-linux.sh --no-hot-reload` leaves the bootstrap out and produces the plain
+direct-inject layout of a public release; `package-release.sh` always does.
+
 ## Reverting the build system
 The original legacy (VS-style) project is preserved as `NGUAdvisor/NGUAdvisor.csproj.legacy`.

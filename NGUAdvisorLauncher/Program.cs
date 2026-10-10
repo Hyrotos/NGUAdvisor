@@ -4,9 +4,16 @@ using System.IO;
 
 namespace NGUAdvisorLauncher
 {
-    // Mirrors "Run NGU Advisor.bat" (hot-reload flow) so the double-clicked launcher carries the advisor
-    // icon. Runs from its own folder: hands the bootstrap the injector path, then injects the bootstrap
-    // via smi.exe, which byte-loads NGUAdvisor.dll. On failure it pauses so the error stays readable.
+    // Mirrors "Run NGU Advisor.bat" so the double-clicked launcher carries the advisor icon. Runs from
+    // its own folder and writes the injector path where the advisor looks for it.
+    //
+    // TWO WAYS IN, chosen by what the package ships:
+    //   * injector\NGUAdvisorBootstrap.dll present -> inject THAT. The bootstrap byte-loads
+    //     NGUAdvisor.dll and can load a newer one into the same game session later, which is what
+    //     makes "Hot-reload advisor" (F5) work. A package built for iterating on the advisor ships it.
+    //   * absent -> inject NGUAdvisor.dll directly, as a release package always has. Hot reload then
+    //     reports itself unavailable, and a new build needs a game restart.
+    // On failure it pauses so the error stays readable.
     internal static class Program
     {
         private static int Main()
@@ -31,8 +38,10 @@ namespace NGUAdvisorLauncher
                 Directory.CreateDirectory(low);
                 File.WriteAllText(Path.Combine(low, "injector-path.txt"), injector);
 
-                var psi = new ProcessStartInfo(smi,
-                    "inject -p NGUIdle -a .\\injector\\NGUAdvisor.dll -n NGUAdvisor -c Loader -m Init")
+                bool bootstrap = File.Exists(Path.Combine(injector, "NGUAdvisorBootstrap.dll"));
+                var psi = new ProcessStartInfo(smi, bootstrap
+                    ? "inject -p NGUIdle -a .\\injector\\NGUAdvisorBootstrap.dll -n NGUAdvisorBootstrap -c Boot -m Init"
+                    : "inject -p NGUIdle -a .\\injector\\NGUAdvisor.dll -n NGUAdvisor -c Loader -m Init")
                 {
                     WorkingDirectory = dir,
                     UseShellExecute = false
