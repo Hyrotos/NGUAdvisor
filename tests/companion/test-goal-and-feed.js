@@ -101,6 +101,46 @@ setTimeout(() => {
     ok("a later plain notice does not inherit the copy offer", !toast.classList.contains("copyable"));
   }
 
+  // AP page: the tier list as a plan. It only advises, so it carries no control of its own; what it
+  // must get right is which row is next, what it costs and how far away it is.
+  {
+    const list = () => $("apPlanList");
+    const rows = () => Array.from(list().querySelectorAll(".planrow"));
+    const tab = name => window.document.querySelector('.ptab[data-aptab="' + name + '"]')
+      .dispatchEvent(new window.Event("click", { bubbles: true }));
+    ok("AP sits under Resources next to EXP",
+       window.document.querySelector('.navitem[data-view="exp"]').nextElementSibling.getAttribute("data-view") === "ap");
+    ok("the AP page has no setting to switch", !window.document.querySelector("#view-ap .manual input"));
+
+    send({ goal: {}, ap: { balance: "1,500", rows: [
+      { name: "ILF", tier: 0, note: "", state: "done" },
+      { name: "Red Heart", tier: 1, note: "If you have an open Daycare slot", state: "current", costKnown: true, cost: "25,000", affordable: false, missing: "23,500" },
+      { name: "AP Beard Slots", tier: 1, note: "", state: "skip" },
+      { name: "Acc slot 1", tier: 1, note: "", state: "queued", costKnown: true, cost: "1,000", affordable: true, count: "Bought: 1 / 2" },
+      { name: "Digger slots", tier: 2, note: "", state: "queued", costKnown: false } ] } });
+
+    ok("balance chip", $("apBalance").textContent === "Balance: 1,500 AP", $("apBalance").textContent);
+    ok("next chip names the row and the gap", $("apNext").textContent === "Next: Red Heart · 23,500 AP short", $("apNext").textContent);
+    ok("upcoming leaves the bought rows out", rows().length === 4 && !/ILF/.test(list().textContent), list().textContent);
+    ok("the next row is marked and priced", rows()[0].classList.contains("current") && /25,000 AP/.test(rows()[0].textContent) && /save up/.test(rows()[0].textContent), rows()[0].textContent);
+    ok("its guide note is shown under it", rows()[0].nextElementSibling.className === "plannote" && rows()[0].nextElementSibling.textContent === "If you have an open Daycare slot");
+    ok("a skipped row says so and shows no price", /not needed/.test(rows()[1].textContent) && !/AP$|cost unknown/.test(rows()[1].querySelector(".pt").textContent), rows()[1].textContent);
+    ok("an affordable later row is flagged, with its count", rows()[2].classList.contains("afford") && /affordable/.test(rows()[2].textContent) && /Bought: 1 \/ 2/.test(rows()[2].textContent), rows()[2].textContent);
+    ok("an unreadable price is never printed as zero", rows()[3].querySelector(".pt").textContent === "cost unknown", rows()[3].textContent);
+    ok("rows are grouped by tier", Array.from(list().querySelectorAll(".plantier")).map(e => e.textContent).join("|") === "TIER 1|TIER 2", list().textContent);
+
+    tab("purchased");
+    ok("purchased shows only the bought rows", rows().length === 1 && /ILF/.test(rows()[0].textContent) && /owned/.test(rows()[0].textContent), list().textContent);
+    tab("upcoming");
+
+    send({ goal: {}, ap: { balance: "30,000", rows: [
+      { name: "Red Heart", tier: 1, note: "", state: "current", costKnown: true, cost: "25,000", affordable: true } ] } });
+    ok("an affordable next row reads buy now", /buy now/.test(rows()[0].textContent) && $("apNext").textContent === "Next: Red Heart · affordable now" && $("apNext").classList.contains("act"), $("apNext").textContent);
+
+    send({ goal: {}, ap: { balance: "9", rows: [ { name: "ILF", tier: 0, note: "", state: "done" } ] } });
+    ok("a finished list says so", $("apNext").textContent === "Tier list complete" && /Everything on the tier list is bought/.test(list().textContent), list().textContent);
+  }
+
   // The Titans view's heading and verdict name the rung the bars are measured against. They used to
   // say "Autokill unlocks at 100%" under bars scaled to the manual first-kill stats.
   send({ instruments: { titan: { known: true, name: "T2 v1", stage: "first kill", atk: 72, def: 34 } }, goal: {} });

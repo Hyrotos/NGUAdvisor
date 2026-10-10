@@ -332,6 +332,10 @@
   .planrow.current { background: var(--accent-bg); }
   .planrow.current .pr, .planrow.current .ps { color: var(--accent); }
   .planrow.chapter, .planrow.diff { opacity: .68; }
+  .planrow.skip { opacity: .68; }
+  .planrow.afford .pt { color: var(--ok); }
+  .plantier { font-family: var(--mono); font-size: var(--fs-1); letter-spacing: .08em; color: var(--faint); padding: 8px 9px 0; }
+  .plannote { font-size: var(--fs-2); color: var(--faint); padding: 0 9px 4px 30px; }
   /* F4: --r-element was one of two radius tokens that were defined and then almost never used (7 distinct
      radii were actually in play). It had exactly two consumers, here and .ftile; both now carry the 8px
      literal and the two decorative tokens are gone. --r-container survives because --r is derived from it. */
@@ -1208,6 +1212,7 @@
       <button class="gh" type="button" aria-expanded="true">Resources</button>
       <button class="navitem" data-view="resources"><span class="ni-dot" aria-hidden="true"></span>Energy / Magic / R3</button>
       <button class="navitem" data-view="exp"><span class="ni-dot" aria-hidden="true"></span>EXP</button>
+      <button class="navitem" data-view="ap"><span class="ni-dot" aria-hidden="true"></span>AP</button>
       <button class="navitem" data-view="wandoos"><span class="ni-dot" aria-hidden="true"></span>Wandoos</button>
       <button class="navitem" data-view="ngu"><span class="ni-dot" aria-hidden="true"></span>NGU</button>
     </div>
@@ -1918,6 +1923,17 @@
           '<div class="seclabel"><span class="eyebrow">Energy : Magic value ratio</span></div>'+
           '<div class="chips"><span class="chip" id="expRatioChip">—</span><span class="chip" id="expRatioStatus">—</span></div>'+
           '<div class="res-row" id="expRatioBars" style="max-width:520px; margin-top:8px;"></div>' },
+      // Advice only: there is no setting here because nothing on this page acts. `groups` stays empty
+      // and the whole page is the persist block, the same shape as the Perks & Quirks plan.
+      ap:          { grp:"Resources", title:"AP", cons:"advisor", sev:"ok", badge:"Advice only",
+        rec:"Suggests what to spend AP on next. The advisor never buys from the AP shop — you do.",
+        why:"The order is OJ of Steel's AP Tier List (build 1.200): one player's opinion, not game truth.",
+        kind:"settings", groups:[],
+        persist:
+          '<div class="seclabel"><span class="eyebrow">AP shop · what to buy next</span></div>'+
+          '<div class="chips"><span class="chip" id="apBalance">—</span><span class="chip" id="apNext">—</span></div>'+
+          '<div class="ptabs" style="margin-top:var(--sp-3)"><button class="ptab active" type="button" data-aptab="upcoming">Upcoming</button><button class="ptab" type="button" data-aptab="purchased">Purchased</button></div>'+
+          '<div class="planlist" id="apPlanList"></div>' },
       wandoos:     { grp:"Resources", title:"Wandoos", cons:"WanDiffEditor (OS)", sev:"ok", badge:"Auto",
         rec:"Picks the Wandoos OS with the best projected payoff over the run.",
         why:"",
@@ -3009,6 +3025,47 @@
     var pt = e.target.closest ? e.target.closest(".ptab[data-plantab]") : null; if(!pt) return;
     pt.parentNode.querySelectorAll(".ptab[data-plantab]").forEach(function(b){ b.classList.toggle("active", b===pt); });
     drawPlans();
+  });
+
+  // AP page: the AP tier list as a plan, same Upcoming / Purchased split as Perks & Quirks.
+  var _apData=null;
+  function apTab(){ var t=document.querySelector(".ptab[data-aptab].active"); return t?t.getAttribute("data-aptab"):"upcoming"; }
+  function apListHtml(rows){
+    var tab=apTab();
+    rows=(rows||[]).filter(function(r){ var done=(r.state==="done"); return tab==="purchased"?done:!done; });
+    if(!rows.length) return '<div class="hint" style="padding:4px 9px">'+(tab==="purchased"?"Nothing bought from the tier list yet.":"Everything on the tier list is bought.")+'</div>';
+    var sw={done:"✓", current:"▶", queued:"·", skip:"‧"}, tier=null, out="";
+    rows.forEach(function(r){
+      var st=r.state||"queued";
+      if(r.tier!==tier){ tier=r.tier; out+='<div class="plantier">TIER '+esc(tier)+'</div>'; }
+      var open=(st==="current"||st==="queued");
+      var price = !open ? "" : r.costKnown ? esc(r.cost)+" AP" : "cost unknown";
+      var right = st==="done"?"owned": st==="skip"?"not needed": r.affordable?(st==="current"?"buy now":"affordable"): st==="current"?"save up":"queued";
+      out+='<div class="planrow '+st+(open&&r.affordable?" afford":"")+'"><span class="ps">'+(sw[st]||"·")+'</span><span class="pn">'+esc(r.name)+
+        (r.count?' <span class="hint">· '+esc(r.count)+'</span>':'')+'</span><span class="pt">'+price+'</span><span class="pr">'+right+'</span></div>';
+      if(r.note) out+='<div class="plannote">'+esc(r.note)+'</div>';
+    });
+    return out;
+  }
+  function drawAp(){
+    if(!_apData) return;
+    var rows=_apData.rows||[], next=null;
+    rows.forEach(function(r){ if(!next && r.state==="current") next=r; });
+    var b=$("apBalance"); if(b) b.textContent="Balance: "+_apData.balance+" AP";
+    var n=$("apNext"); if(n){
+      n.textContent = !next ? "Tier list complete"
+        : !next.costKnown ? "Next: "+next.name+" · cost unknown"
+        : next.affordable ? "Next: "+next.name+" · affordable now"
+        : "Next: "+next.name+" · "+next.missing+" AP short";
+      n.className="chip"+(next&&next.affordable?" act":"");
+    }
+    var l=$("apPlanList"); if(l) l.innerHTML=apListHtml(rows);
+  }
+  function renderAp(s){ if(s.ap) _apData=s.ap; drawAp(); }
+  document.addEventListener("click", function(e){
+    var pt = e.target.closest ? e.target.closest(".ptab[data-aptab]") : null; if(!pt) return;
+    pt.parentNode.querySelectorAll(".ptab[data-aptab]").forEach(function(b){ b.classList.toggle("active", b===pt); });
+    drawAp();
   });
 
   function renderHeader(s){
@@ -6861,6 +6918,7 @@
     try{ renderFruits(s); }catch(e){}
     try{ renderMoneypit(s); }catch(e){}
     try{ renderPlans(s); }catch(e){}
+    try{ renderAp(s); }catch(e){}
     try{ renderGrowth(s); }catch(e){}
     try{ renderSystems(s); }catch(e){}
     try{ renderMacguffins(s); }catch(e){}

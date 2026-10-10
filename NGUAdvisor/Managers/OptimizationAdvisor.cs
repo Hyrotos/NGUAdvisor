@@ -1191,6 +1191,20 @@ namespace NGUAdvisor.Managers
             catch { return 0; }
         }
 
+        // Would one more beard slot be filled? CurrentBeardSet fills every slot it has, so the only
+        // way an extra one stays empty is when every beard the game offers is already running.
+        public static bool ExtraBeardSlotUsed()
+        {
+            var c = Main.Character;
+            if (c == null) return true;
+            try
+            {
+                int beards = Consts.MAX_BEARD_ID + (GoldenUnlocked() ? 1 : 0);
+                return Math.Max(1, c.allBeards.capBeards()) < beards;
+            }
+            catch { return true; }
+        }
+
         private static bool GoldenUnlocked()
         {
             try { return Main.Character.allChallenges.trollChallenge.completions() >= 7; }

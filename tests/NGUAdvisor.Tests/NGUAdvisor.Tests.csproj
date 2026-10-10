@@ -110,6 +110,7 @@
     <Compile Include="..\..\NGUAdvisor\Managers\GearChain.cs" Link="Linked\GearChain.cs" />
     <Compile Include="..\..\NGUAdvisor\Managers\TitanDropTables.cs" Link="Linked\TitanDropTables.cs" />
     <Compile Include="..\..\NGUAdvisor\Managers\QuestGearSet.cs" Link="Linked\QuestGearSet.cs" />
+    <Compile Include="..\..\NGUAdvisor\Managers\ApTierTable.cs" Link="Linked\ApTierTable.cs" />
     <Compile Include="..\..\NGUAdvisor\Managers\HostPath.cs" Link="Linked\HostPath.cs" />
     <Compile Include="..\..\NGUAdvisor\Managers\EditorCatalog.cs" Link="Linked\EditorCatalog.cs" />
     <!-- "I must survive this fight" -> a gear-stat number. The arithmetic is separated from the live

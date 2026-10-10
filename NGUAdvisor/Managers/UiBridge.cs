@@ -2156,6 +2156,39 @@ namespace NGUAdvisor.Managers
             Safe("perkPlan", () => { root["perkPlan"] = PlanArr(SpendPlanner.PerkPlanView()); });
             Safe("quirkPlan", () => { root["quirkPlan"] = PlanArr(SpendPlanner.QuirkPlanView()); });
 
+            // --- AP page: the whole AP tier list with what is bought, what to buy next and its price.
+            //     Advice only - ApPurchaseAdvisor reads the shop and never buys from it. ---
+            Safe("ap", () =>
+            {
+                var ap = new JSONObject();
+                var rows = new JSONArray();
+                long balance = ApPurchaseAdvisor.Balance();
+                foreach (var r in ApPurchaseAdvisor.Plan())
+                {
+                    var o = new JSONObject();
+                    o["name"] = r.Item.Name;
+                    o["tier"] = r.Item.Tier;
+                    o["note"] = r.Item.Note ?? "";
+                    o["state"] = r.State;
+                    if (r.Rec.Known)
+                    {
+                        o["costKnown"] = r.Rec.CostKnown;
+                        if (r.Rec.CostKnown)
+                        {
+                            o["cost"] = r.Rec.Cost.ToString("N0", CultureInfo.InvariantCulture);
+                            o["affordable"] = r.Rec.Affordable;
+                            if (!r.Rec.Affordable)
+                                o["missing"] = (r.Rec.Cost - balance).ToString("N0", CultureInfo.InvariantCulture);
+                        }
+                        if (r.Rec.CountStatus != null) o["count"] = r.Rec.CountStatus;
+                    }
+                    rows.Add(o);
+                }
+                ap["balance"] = balance.ToString("N0", CultureInfo.InvariantCulture);
+                ap["rows"] = rows;
+                root["ap"] = ap;
+            });
+
             // --- cards: static meta (bonus-type rows / rarity map / cost list / sort vocab) + live filter arrays. ---
             Safe("cards", () =>
             {
