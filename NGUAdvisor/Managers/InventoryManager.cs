@@ -94,22 +94,24 @@ namespace NGUAdvisor.Managers
 
         public static ih[] GetBoostSlots(ih[] ci)
         {
-            var result = new List<ih>();
-            // First, find items in our priority list
+            // The priority list, resolved to the items actually held
+            var priority = new List<ih>();
             foreach (var id in Settings.PriorityBoosts.Except(Settings.BoostBlacklist))
             {
                 var f = LoadoutManager.FindItemSlot(id);
                 if (f?.equipment.isEquipment() == true)
-                    result.Add(f);
+                    priority.Add(f);
             }
 
-            // Next, get equipped items that aren't in our priority list and aren't blacklisted
+            // Equipped items that aren't in our priority list and aren't blacklisted
             var equipped = Inventory.GetConvertedEquips().Where(x => !IsPriority(x) && !IsBlacklisted(x));
-            result.AddRange(equipped);
 
-            // Finally, find locked items in inventory that aren't blacklisted
+            // Locked items in inventory that aren't blacklisted
             var invItems = Array.FindAll(ci, x => x.locked && x.equipment.isEquipment() && !IsPriority(x) && !IsBlacklisted(x));
-            result.AddRange(invItems);
+
+            // Which group leads is BoostOrder's call: worn gear first under the advisor's list, the
+            // list first when it is the operator's own.
+            var result = BoostOrder.Arrange(priority, equipped, invItems, Settings.AutoBoostPriority);
 
             // Make sure we filter out non-equips again, just in case one snuck into priorityboosts
             return result.FindAll(x => x.equipment.GetNeededBoosts().Total() > 0).ToArray();
@@ -329,7 +331,7 @@ namespace NGUAdvisor.Managers
         // was already answering: how long until the things I'm boosting are maxed?
         //
         // PerItem is keyed by gear id and holds the boosts THAT item still needs. Because GetBoostSlots
-        // returns the priority list first, a running total down that list is a per-item ETA — which is
+        // returns them in the order they are boosted (BoostOrder), a running total down that order is a per-item ETA — which is
         // what makes reordering the list meaningful rather than a guess.
         public static BoostsNeeded LastNeeded { get; private set; }
         public static float LastBoostsPerMinute { get; private set; }

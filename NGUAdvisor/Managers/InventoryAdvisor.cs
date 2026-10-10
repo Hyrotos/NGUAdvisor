@@ -160,8 +160,8 @@ namespace NGUAdvisor.Managers
         }
 
         // Advisor-driven boost priority: unequipped KEEP items ranked by objective usage, then chain
-        // climbers (highest owned tier still below max). Equipped gear is boosted first by the
-        // existing InventoryManager pass regardless of this list.
+        // climbers (highest owned tier still below max). Equipped gear is left out because, while this
+        // list is in charge, it is boosted BEFORE the list (BoostOrder).
         // Fully-boosted items have nothing left to receive — they neither rank nor display.
         private static bool NeedsBoosts(int id)
         {
