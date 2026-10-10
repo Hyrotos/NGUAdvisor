@@ -46,6 +46,13 @@ public sealed class MainForm : Form
         MinimumSize = new Size(900, 600);
         RestoreGeometry();                                  // J3 — sets size/position (defaults if none saved)
 
+        // Paint both layers in the page's own ground colour (--ground in index.html). Left at the
+        // defaults - a grey form under a WHITE web view - every repaint the page had not answered yet
+        // showed through as a white flash, most visibly when the window took focus under Wine.
+        var ground = Color.FromArgb(0x0a, 0x0e, 0x14);
+        BackColor = ground;
+        _web.DefaultBackgroundColor = ground;   // must be set before the web view initialises
+
         _web.Dock = DockStyle.Fill;
         Controls.Add(_web);
 
