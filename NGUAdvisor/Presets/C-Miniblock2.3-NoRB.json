@@ -13,11 +13,11 @@
       },
       {
         "Time": { "h": 1 },
-        "Priorities": [ "WAN", "AT-3", "AT-4" ]
+        "Priorities": [ "CAPALLBT", "WAN", "AT-3", "AT-4" ]
       },
       {
         "Time": { "h": 4 },
-        "Priorities": [ "TM", "WAN", "BESTAUG" ],
+        "Priorities": [ "CAPALLBT", "TM", "WAN", "BESTAUG" ],
         "Comment": "FoP is eaten at hour 2 and 4, the boost from these fruit should unlock TM"
       }
     ],

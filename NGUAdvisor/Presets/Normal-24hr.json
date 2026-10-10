@@ -4,8 +4,8 @@
     "_Injector": "Steady-state Normal profile (ch.3+). Leave Auto Rebirth ON. When a titan kill is actually in reach the advisor recommends Normal-LRB (a one-shot, no-auto-rebirth push) instead - switch back here after the kill.",
     "Energy": [
       { "Time": 0, "Priorities": [ "CAPALLBT", "CAPTM", "BESTAUG" ] },
-      { "Time": { "h": 1 }, "Priorities": [ "CAPALLAT", "BESTAUG" ] },
-      { "Time": { "h": 2 }, "Priorities": [ "NGU-4", "NGU-6" ] }
+      { "Time": { "h": 1 }, "Priorities": [ "CAPALLBT", "CAPALLAT", "BESTAUG" ] },
+      { "Time": { "h": 2 }, "Priorities": [ "CAPALLBT", "NGU-4", "NGU-6" ] }
     ],
     "Magic": [
       { "Time": 0, "Priorities": [ "CAPTM", "BR" ] },

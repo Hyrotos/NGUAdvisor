@@ -14,7 +14,7 @@
       },
       {
         "Time": { "h": 1 },
-        "Priorities": [ "CAPWAN", "AT-3", "AT-4" ]
+        "Priorities": [ "CAPALLBT", "CAPWAN", "AT-3", "AT-4" ]
       }
     ],
     "Magic": [

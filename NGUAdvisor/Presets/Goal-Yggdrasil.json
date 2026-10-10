@@ -3,8 +3,8 @@
     "_Preset": "Goal loadout preset (auto-installed). Magic focuses the Yggdrasil NGU; gear auto-optimizes for the Yggdrasil harvest set (Seeds > EXP > Gold > AP) + keeps a top Respawn item. Requires Manage Gear + Manage Energy/Magic.",
     "Energy": [
       { "Time": 0, "Priorities": [ "CAPALLBT", "CAPTM", "BESTAUG" ] },
-      { "Time": { "h": 1 }, "Priorities": [ "CAPALLAT", "BESTAUG" ] },
-      { "Time": { "h": 2 }, "Priorities": [ "NGU-4" ] }
+      { "Time": { "h": 1 }, "Priorities": [ "CAPALLBT", "CAPALLAT", "BESTAUG" ] },
+      { "Time": { "h": 2 }, "Priorities": [ "CAPALLBT", "NGU-4" ] }
     ],
     "Magic": [
       { "Time": 0, "Priorities": [ "CAPTM", "BR" ] },

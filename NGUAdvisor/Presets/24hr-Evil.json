@@ -26,7 +26,7 @@
       },
       {
         "Time": { "m": 30 },
-        "Priorities": [ "CAPALLAT", "CAPWAN", "AUG-8", "AUG-9" ],
+        "Priorities": [ "CAPALLBT", "CAPALLAT", "CAPWAN", "AUG-8", "AUG-9" ],
 		"Note": "Set AT thresholds, expand time as needed to hit goals",
         "AdvDC": [ "NGU-4", "NGU-6" ],
         "PAWG (Challenge Prep)": [ "NGU-5", "NGU-0", "NGU-1", "NGU-3" ],
@@ -36,12 +36,12 @@
 	  },
       {
         "Time": { "h": 1 },
-        "Priorities": [ "CAPALLNGU", "CAPALLAT", "CAPTM" ],
+        "Priorities": [ "CAPALLBT", "CAPALLNGU", "CAPALLAT", "CAPTM" ],
         "Note": "Normal NGUs + Hacks"
       },
       {
         "Time": { "h": 22 },
-        "Priorities": [ "CAPALLAT", "ALLNGU" ],
+        "Priorities": [ "CAPALLBT", "CAPALLAT", "ALLNGU" ],
         "Note1": "Evil NGU time",
 		"Note2": "Use this time to boost up NGUs which are lagging behind according to the Gear Optimizer",
 		"Thresholds": "Magic-NGU or PP > x1.05, Respawn < x0.95, Gold > x1.2"

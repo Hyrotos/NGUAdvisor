@@ -26,12 +26,12 @@
       },
       {
         "Time": { "m": 30 },
-	    "Priorities": [ "AUG-6", "AUG-7" ],
+	    "Priorities": [ "CAPALLBT", "AUG-6", "AUG-7" ],
 		"Note": "Reduce this time after unlocking boss 125 to match the time to reach 125"
       },
       {
         "Time": { "h": 1 },
-        "Priorities": [ "CAPALLNGU", "CAPALLAT", "CAPWAN", "AUG-6", "AUG-7" ],
+        "Priorities": [ "CAPALLBT", "CAPALLNGU", "CAPALLAT", "CAPWAN", "AUG-6", "AUG-7" ],
 		"Note": "Set AT thresholds, expand time as needed to hit goals",
         "AdvDC": [ "NGU-4", "NGU-6" ],
         "PAWG (Challenge Prep)": [ "NGU-5", "NGU-0", "NGU-1", "NGU-3" ],
@@ -41,7 +41,7 @@
 	  },
       {
         "Time": { "h": 22 },
-        "Priorities": [ "ALLNGU" ],
+        "Priorities": [ "CAPALLBT", "ALLNGU" ],
         "Note": "Evil NGU time",
         "Note2": "Add one hour per version of T7 defeated (ie: 22 at easy, 21 at normal, 20 at hard, 19 at brutal)",
 		"Note3": "Use this time to boost up NGUs which are lagging behind according to the Gear Optimizer",

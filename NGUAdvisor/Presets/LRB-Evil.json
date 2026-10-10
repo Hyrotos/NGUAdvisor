@@ -9,27 +9,27 @@
       },
       {
         "Time": { "m": 30 },
-        "Priorities": [ "CAPALLAT", "CAPWAN", "AUG-8", "AUG-9" ]
+        "Priorities": [ "CAPALLBT", "CAPALLAT", "CAPWAN", "AUG-8", "AUG-9" ]
 	  },
       {
         "Time": { "h": 1 },
-        "Priorities": [ "CAPNGU-7", "NGU-8" ]
+        "Priorities": [ "CAPALLBT", "CAPNGU-7", "NGU-8" ]
       },
       {
         "Time": { "h": 4 },
-        "Priorities": [ "CAPNGU-4", "ALLAT", "AUG-8", "AUG-9" ]
+        "Priorities": [ "CAPALLBT", "CAPNGU-4", "ALLAT", "AUG-8", "AUG-9" ]
       },
       {
         "Time": { "h": 21 },
-        "Priorities": [ "CAPNGU-8", "ALLNGU", "CAPALLAT" ]
+        "Priorities": [ "CAPALLBT", "CAPNGU-8", "ALLNGU", "CAPALLAT" ]
       },
       {
         "Time": { "h": 24 },
-        "Priorities": [ "CAPALLAT", "ALLNGU" ]
+        "Priorities": [ "CAPALLBT", "CAPALLAT", "ALLNGU" ]
       },
       {
         "Time": { "h": 48 },
-        "Priorities": [ "CAPALLAT", "CAPALLNGU", "CAPWAN", "AUG-8", "AUG-9" ]
+        "Priorities": [ "CAPALLBT", "CAPALLAT", "CAPALLNGU", "CAPWAN", "AUG-8", "AUG-9" ]
       }
     ],
     "Magic": [

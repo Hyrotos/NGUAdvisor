@@ -3,8 +3,8 @@
     "_Preset": "Goal loadout preset (auto-installed). Proven 24h Adventure/Drop-Chance allocation; gear auto-optimizes on a timeline: Time Machine -> Advanced Training -> NGUs -> Adventure. Requires Manage Gear + Manage Energy/Magic.",
     "Energy": [
       { "Time": 0, "Priorities": [ "CAPALLBT", "CAPTM", "BESTAUG" ] },
-      { "Time": { "h": 1 }, "Priorities": [ "CAPALLAT", "BESTAUG" ] },
-      { "Time": { "h": 2 }, "Priorities": [ "NGU-4", "NGU-6" ] }
+      { "Time": { "h": 1 }, "Priorities": [ "CAPALLBT", "CAPALLAT", "BESTAUG" ] },
+      { "Time": { "h": 2 }, "Priorities": [ "CAPALLBT", "NGU-4", "NGU-6" ] }
     ],
     "Magic": [
       { "Time": 0, "Priorities": [ "CAPTM", "BR" ] },

@@ -26,7 +26,7 @@
       },
       {
         "Time": { "m": 15 },
-        "Priorities": [ "CAPWAN", "AUG-10", "AUG-11", "CAPALLNGU", "CAPTM" ],
+        "Priorities": [ "CAPALLBT", "CAPWAN", "AUG-10", "AUG-11", "CAPALLNGU", "CAPTM" ],
         "Note1": "Evil NGU time",
 		"Note2": "Use this time to boost up NGUs which are lagging behind according to the Gear Optimizer",
 		"Thresholds": "Magic-NGU or PP > x1.05, Respawn < x0.95, Gold > x1.2",

@@ -3,8 +3,8 @@
     "_Preset": "Goal loadout preset (auto-installed). 24h allocation pushing the cross NGUs (Magic-NGU via energy, Energy-NGU via magic); gear auto-optimizes for NGUs + keeps a top Respawn item. Requires Manage Gear + Manage Energy/Magic.",
     "Energy": [
       { "Time": 0, "Priorities": [ "CAPALLBT", "CAPTM", "BESTAUG" ] },
-      { "Time": { "h": 1 }, "Priorities": [ "CAPALLAT", "BESTAUG" ] },
-      { "Time": { "h": 2 }, "Priorities": [ "NGU-7" ] }
+      { "Time": { "h": 1 }, "Priorities": [ "CAPALLBT", "CAPALLAT", "BESTAUG" ] },
+      { "Time": { "h": 2 }, "Priorities": [ "CAPALLBT", "NGU-7" ] }
     ],
     "Magic": [
       { "Time": 0, "Priorities": [ "CAPTM", "BR" ] },

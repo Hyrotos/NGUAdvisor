@@ -329,6 +329,10 @@ namespace NGUAdvisor.Tests
         // found: whether the second seat should cost the other lanes a share is a profile-design question.
         [Theory]
         [InlineData("24hr-EarlyEvil.json", "Energy", 3,
+            // CAPALLBT leads every energy breakpoint: Basic Training costs next to nothing.
+            "BasicTrainingBP#0(cap)", "BasicTrainingBP#1(cap)", "BasicTrainingBP#2(cap)", "BasicTrainingBP#3(cap)",
+            "BasicTrainingBP#4(cap)", "BasicTrainingBP#5(cap)", "BasicTrainingBP#6(cap)", "BasicTrainingBP#7(cap)",
+            "BasicTrainingBP#8(cap)", "BasicTrainingBP#9(cap)", "BasicTrainingBP#10(cap)", "BasicTrainingBP#11(cap)",
             "NGUBP#0()", "NGUBP#1()", "NGUBP#2()", "NGUBP#3()", "NGUBP#4()",
             "NGUBP#5()", "NGUBP#6()", "NGUBP#7()", "NGUBP#8()")]
         [InlineData("24hr-EarlyEvil.json", "Magic", 3,
