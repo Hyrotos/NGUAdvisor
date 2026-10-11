@@ -42,7 +42,12 @@ namespace NGUAdvisor.Managers
             public string Match;    // matched against live name list
             public long Target;     // 0 = max level (perks/quirks); tier for fruits
             public int MinChapter;  // step ignored before this chapter
-            public Step(string m, long t, int ch) { Match = m; Target = t; MinChapter = ch; }
+            // Fruits only: tier cap the step needs (0 = ungated). The guide schedules the tier-24
+            // push for ch4, but the GAME gate is AllYggdrasil.capTier() -- 10 until Troll Challenge
+            // 3x, then 24. Those come apart (cap earned before T6), and gating on the chapter alone
+            // stalled the plan with seeds banked and nowhere to spend them.
+            public int MinCap;
+            public Step(string m, long t, int ch, int minCap = 0) { Match = m; Target = t; MinChapter = ch; MinCap = minCap; }
         }
 
         // ---- ITOPOD perk order (guide ch2-4; ch5+ partial) ----
@@ -128,7 +133,7 @@ namespace NGUAdvisor.Managers
             new Step("Beasted Boosts II", 0, 5),              // guide ch5: "Beasted Boosts 2"
         };
 
-        // ---- Yggdrasil fruit tier order (guide ch3 + ch4 sequence) ----
+        // ---- Yggdrasil fruit tier order (guide ch3 + ch4 sequence, ch5 Evil order, ch7 mayo) ----
         private static readonly Step[] FruitPlan =
         {
             new Step("Gold", 10, 3),
@@ -137,16 +142,39 @@ namespace NGUAdvisor.Managers
             new Step("Luck", 1, 3),
             new Step("Pomegranate", 10, 3),
             new Step("Luck", 5, 3),
-            new Step("Gold", 24, 4),          // post-TC3 (cap 24): FoG -> Pom -> FoK -> FoL ->
-            new Step("Pomegranate", 24, 4),   // FoPa/FoA -> FoAP -> FoPb/FoN -> FoR
-            new Step("Knowledge", 24, 4),
-            new Step("Luck", 24, 4),
-            new Step("Power α", 24, 4),
-            new Step("Adventure", 24, 4),
-            new Step("Arbitrariness", 24, 4),
-            new Step("Power β", 24, 4),
-            new Step("Numbers", 24, 4),
-            new Step("Rage", 24, 4),
+            new Step("Gold", 24, 3, 24),          // post-TC3 (cap 24): FoG -> Pom -> FoK -> FoL ->
+            new Step("Pomegranate", 24, 3, 24),   // FoPa/FoA -> FoAP -> FoPb/FoN -> FoR
+            new Step("Knowledge", 24, 3, 24),
+            new Step("Luck", 24, 3, 24),
+            new Step("Power α", 24, 3, 24),
+            new Step("Adventure", 24, 3, 24),
+            new Step("Arbitrariness", 24, 3, 24),
+            new Step("Power β", 24, 3, 24),
+            new Step("Numbers", 24, 3, 24),
+            new Step("Rage", 24, 3, 24),
+            // guide ch5 "Yggdrasil Order": early Evil, then mid-late Evil.
+            new Step("Fruit of MacGuffin α", 12, 5, 24),
+            new Step("Fruit of MacGuffin β", 1, 5, 24),
+            new Step("Fruit of Quirks", 4, 5, 24),
+            new Step("Watermelon", 24, 5, 24),
+            new Step("Fruit of Quirks", 12, 5, 24),
+            new Step("Fruit of MacGuffin α", 24, 5, 24),
+            new Step("Fruit of Quirks", 24, 5, 24),
+            new Step("Fruit of Power δ", 24, 5, 24),
+            new Step("Fruit of MacGuffin β", 24, 5, 24),
+            // guide ch7: "Finish last non-mayo fruits, then level mayo fruits equally" — in rungs of 6.
+            new Step("Fruit of Angry Mayo", 6, 7, 24), new Step("Fruit of Sad Mayo", 6, 7, 24),
+            new Step("Fruit of Moldy Mayo", 6, 7, 24), new Step("Fruit of Ayy Lmayo", 6, 7, 24),
+            new Step("Fruit of Cinco De Mayo", 6, 7, 24), new Step("Fruit of Pretty Mayo", 6, 7, 24),
+            new Step("Fruit of Angry Mayo", 12, 7, 24), new Step("Fruit of Sad Mayo", 12, 7, 24),
+            new Step("Fruit of Moldy Mayo", 12, 7, 24), new Step("Fruit of Ayy Lmayo", 12, 7, 24),
+            new Step("Fruit of Cinco De Mayo", 12, 7, 24), new Step("Fruit of Pretty Mayo", 12, 7, 24),
+            new Step("Fruit of Angry Mayo", 18, 7, 24), new Step("Fruit of Sad Mayo", 18, 7, 24),
+            new Step("Fruit of Moldy Mayo", 18, 7, 24), new Step("Fruit of Ayy Lmayo", 18, 7, 24),
+            new Step("Fruit of Cinco De Mayo", 18, 7, 24), new Step("Fruit of Pretty Mayo", 18, 7, 24),
+            new Step("Fruit of Angry Mayo", 24, 7, 24), new Step("Fruit of Sad Mayo", 24, 7, 24),
+            new Step("Fruit of Moldy Mayo", 24, 7, 24), new Step("Fruit of Ayy Lmayo", 24, 7, 24),
+            new Step("Fruit of Cinco De Mayo", 24, 7, 24), new Step("Fruit of Pretty Mayo", 24, 7, 24),
         };
 
         // 0 = stage unknown: every chapter-gated step then skips, so NextPerk/NextQuirk go un-Known
@@ -503,6 +531,7 @@ namespace NGUAdvisor.Managers
                 foreach (var step in FruitPlan)
                 {
                     if (chapter < step.MinChapter) continue;
+                    if (cap < step.MinCap) continue;
                     int id = FindByName(ycon.fruitName, step.Match, "fruit");
                     if (id < 0 || id >= fruits.Count || id >= ycon.baseSeedCost.Count) continue;
                     long target = Math.Min(step.Target, cap);
@@ -521,17 +550,54 @@ namespace NGUAdvisor.Managers
             return b;
         }
 
-        // Unlock gates for the special fruits (from FruitController's unlock checks).
+        // The whole fruit plan with per-step status, for the Yggdrasil page (mirror of PerkPlanView).
+        // Nothing is skipped: a step the chapter, an unlock or the tier cap holds back is listed with
+        // that reason, so banked seeds can be read against what they are being saved for.
+        public static List<PlanStep> FruitPlanView()
+        {
+            var outp = new List<PlanStep>();
+            try
+            {
+                var c = Main.Character;
+                if (c == null) return outp;
+                var ycon = c.yggdrasilController;
+                var fruits = c.yggdrasil.fruits;
+                if (ycon == null || fruits == null) return outp;
+                int chapter = Chapter();
+                int cap = ycon.capTier();
+                bool currentSet = false;
+                foreach (var step in FruitPlan)
+                {
+                    int id = FindByName(ycon.fruitName, step.Match, "fruit");
+                    if (id < 0 || id >= fruits.Count || id >= ycon.baseSeedCost.Count) continue;
+                    long tier = fruits[id].maxTier;
+                    var ps = new PlanStep { Id = id, Name = ycon.fruitName[id]?.Trim(), CurLevel = tier, Target = step.Target, MinChapter = step.MinChapter };
+                    ps.Cost = ycon.baseSeedCost[id] * (long)Math.Ceiling(Math.Pow(tier + 1, 2));
+                    ps.State = FruitPlanState.Classify(tier, step.Target, chapter, step.MinChapter, cap, step.MinCap,
+                        tier > 0 || CanUnlockFruit(c, ycon.fruitName[id]), ref currentSet);
+                    outp.Add(ps);
+                }
+            }
+            catch (Exception e) { Main.LogDebug($"SpendPlanner fruit view: {e.Message}"); }
+            return outp;
+        }
+
+        // Unlock gates for the special fruits (from FruitController.upgrade()'s checks; MacGuffin β has none).
         private static bool CanUnlockFruit(Character c, string name)
         {
             try
             {
+                // upgrade() refuses Numbers at tier 0 outright: only Troll Challenge #5 grants it.
                 if (name.IndexOf("Numbers", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return c.allChallenges.trollChallenge.completions() >= 5;
+                    return false;
                 if (name.IndexOf("Rage", StringComparison.OrdinalIgnoreCase) >= 0)
                     return c.settings.itopodOn;
-                if (name.IndexOf("MacGuffin", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (name.IndexOf("MacGuffin α", StringComparison.OrdinalIgnoreCase) >= 0)
                     return c.achievements.achievementComplete[145];
+                if (name.IndexOf("Quirks", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return c.settings.beastOn;
+                if (name.IndexOf("mayo", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return c.cards.cardsOn;
                 return true;
             }
             catch { return false; }

@@ -153,6 +153,39 @@ setTimeout(() => {
     ok("10 and up is unchanged, and so is zero", cmp(12.4, 2600) === "~12 / kill | ~2.6K / kill" && cmp(0, 0) === "~0 / kill | ~0 / kill", cmp(12.4, 2600));
   }
 
+  // Yggdrasil page: the guide's fruit-tier order as a plan, with the reason a step is held back.
+  {
+    const list = () => $("fruitPlanList");
+    const rows = () => Array.from(list().querySelectorAll(".planrow"));
+    const tab = (view, name) => window.document.querySelector('#view-' + view + ' .ptab[data-plantab="' + name + '"]')
+      .dispatchEvent(new window.Event("click", { bubbles: true }));
+    send({ goal: {},
+      perkPlan: [ { name: "Newbie Perk", cur: "1", target: "1", cost: "1", chapter: 2, state: "done" },
+                  { name: "Later Perk", cur: "0", target: "5", cost: "3", chapter: 2, state: "current" } ],
+      fruitPlan: [
+        { name: "Fruit of Gold", cur: "10", target: "10", cost: "1.2K", chapter: 3, state: "done" },
+        { name: "Fruit of Pomegranate", cur: "3", target: "5", cost: "800", chapter: 3, state: "current" },
+        { name: "Fruit of Luck", cur: "0", target: "1", cost: "50", chapter: 3, state: "queued" },
+        { name: "Fruit of Gold", cur: "10", target: "24", cost: "9K", chapter: 3, state: "cap" },
+        { name: "Fruit of Numbers", cur: "0", target: "24", cost: "1M", chapter: 3, state: "locked" },
+        { name: "Fruit of Quirks", cur: "0", target: "4", cost: "5M", chapter: 5, state: "chapter" } ] });
+
+    ok("the fruit plan is the last block on the Yggdrasil page",
+       window.document.querySelector("#view-yggdrasil").lastElementChild.contains(list()));
+    ok("upcoming lists every step still to buy, in order", rows().length === 5 && /Pomegranate/.test(rows()[0].textContent), list().textContent);
+    ok("the next tier is marked with its seed price", rows()[0].classList.contains("current") && /3 → 5 · 800 seeds/.test(rows()[0].textContent) && /buy now/.test(rows()[0].textContent), rows()[0].textContent);
+    ok("a cap-held step says so", /tier cap/.test(rows()[2].textContent), rows()[2].textContent);
+    ok("a fruit that cannot be unlocked yet says so", /locked/.test(rows()[3].textContent), rows()[3].textContent);
+    ok("a later-chapter step names the chapter", /ch\.5/.test(rows()[4].textContent), rows()[4].textContent);
+
+    tab("yggdrasil", "purchased");
+    ok("purchased shows the bought tiers", rows().length === 1 && /Fruit of Gold/.test(rows()[0].textContent) && /done/.test(rows()[0].textContent), list().textContent);
+    ok("switching tabs on Yggdrasil leaves Perks on its own tab", /Later Perk/.test($("perkPlanList").textContent) && !/Newbie Perk/.test($("perkPlanList").textContent), $("perkPlanList").textContent);
+    tab("perks", "purchased");
+    ok("and the other way round", /Newbie Perk/.test($("perkPlanList").textContent) && rows().length === 1, $("perkPlanList").textContent);
+    tab("perks", "upcoming"); tab("yggdrasil", "upcoming");
+  }
+
   // An affordable AP buy reaches the overview as an advisor card that opens the AP page.
   send({ goal: {}, actions: [
     { system: "Power", text: "Push the titan", severity: 2 },

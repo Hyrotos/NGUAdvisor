@@ -2157,6 +2157,7 @@ namespace NGUAdvisor.Managers
             //     user's current chapter (was: only the single "next buy" reached the UI). ---
             Safe("perkPlan", () => { root["perkPlan"] = PlanArr(SpendPlanner.PerkPlanView()); });
             Safe("quirkPlan", () => { root["quirkPlan"] = PlanArr(SpendPlanner.QuirkPlanView()); });
+            Safe("fruitPlan", () => { root["fruitPlan"] = PlanArr(SpendPlanner.FruitPlanView()); });
 
             // --- AP page: the whole AP tier list with what is bought, what to buy next and its price.
             //     Advice only - ApPurchaseAdvisor reads the shop and never buys from it. ---

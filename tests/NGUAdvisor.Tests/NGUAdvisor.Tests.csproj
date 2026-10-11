@@ -113,6 +113,7 @@
     <Compile Include="..\..\NGUAdvisor\Managers\ApTierTable.cs" Link="Linked\ApTierTable.cs" />
     <Compile Include="..\..\NGUAdvisor\Managers\BoostOrder.cs" Link="Linked\BoostOrder.cs" />
     <Compile Include="..\..\NGUAdvisor\Managers\GearProjection.cs" Link="Linked\GearProjection.cs" />
+    <Compile Include="..\..\NGUAdvisor\Managers\FruitPlanState.cs" Link="Linked\FruitPlanState.cs" />
     <Compile Include="..\..\NGUAdvisor\Managers\HostPath.cs" Link="Linked\HostPath.cs" />
     <Compile Include="..\..\NGUAdvisor\Managers\EditorCatalog.cs" Link="Linked\EditorCatalog.cs" />
     <!-- "I must survive this fight" -> a gear-stat number. The arithmetic is separated from the live

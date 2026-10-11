@@ -331,7 +331,7 @@
   .planrow.done { opacity: .7; }   /* E11: .45 = 2.63:1. A purchased perk's name still has to be readable. */
   .planrow.current { background: var(--accent-bg); }
   .planrow.current .pr, .planrow.current .ps { color: var(--accent); }
-  .planrow.chapter, .planrow.diff { opacity: .68; }
+  .planrow.chapter, .planrow.diff, .planrow.cap, .planrow.locked { opacity: .68; }
   .planrow.skip { opacity: .68; }
   .planrow.afford .pt { color: var(--ok); }
   .plantier { font-family: var(--mono); font-size: var(--fs-1); letter-spacing: .08em; color: var(--faint); padding: 8px 9px 0; }
@@ -2060,7 +2060,14 @@
           '<div class="seclabel"><span class="eyebrow">Orchard · fruits</span></div>'+
           '<div class="mh"><span class="hint" id="yggSeeds">—</span></div>'+
           '<div class="tilegrid" id="fruitTiles"></div>'+
-          '<div class="mh"><span class="hint" id="fruitPoop" style="color:var(--faint)"></span></div>' },
+          '<div class="mh"><span class="hint" id="fruitPoop" style="color:var(--faint)"></span></div>',
+        // The guide's fruit-tier order as a plan, the same shape as Perks & Quirks. A step held
+        // back says by what: the chapter, the fruit's own unlock, or the Yggdrasil tier cap.
+        // `tail`, not `persist`: it is the longest block on the page, so it goes below the settings.
+        tail:
+          '<div class="seclabel"><span class="eyebrow">Guide plan · fruit tiers in buying order</span></div>'+
+          '<div class="ptabs"><button class="ptab active" type="button" data-plantab="upcoming">Upcoming</button><button class="ptab" type="button" data-plantab="purchased">Purchased</button></div>'+
+          '<div class="planlist" id="fruitPlanList"></div>' },
       blood:       { grp:"Growth", title:"Blood", cons:"BloodPanel", sev:"ok", badge:"Auto",
         rec:"Casts blood spells and pools iron pills; the planner mirrors the caster's own refusal rules.",
         why:"",
@@ -2297,7 +2304,9 @@
         // Filled by renderTimelineSummary once a timelines message arrives.
         (v.kind === "timeline" ? '<div class="tl-summary"><div class="seclabel"><span class="eyebrow">Profile timeline</span></div>'+
            '<div class="mh"><span class="hint tl-pay mut">loading breakpoints…</span></div></div>' : '')+
-        '<div class="manual">'+buildManual(v)+'</div>';
+        '<div class="manual">'+buildManual(v)+'</div>'+
+        // `tail` is a second .persist block (shown in both modes) that sits at the very END of the page.
+        (v.tail ? '<div class="persist">'+v.tail+'</div>' : '');
       canvas.appendChild(sec);
     });
 
@@ -3003,26 +3012,38 @@
   }
 
   // Perks & Quirks guide plan, split into Upcoming / Purchased tabs.
-  var _perkPlanData=null, _quirkPlanData=null;
-  function planTab(){ var t=document.querySelector(".ptab[data-plantab].active"); return t?t.getAttribute("data-plantab"):"upcoming"; }
-  function planListHtml(arr){
-    var tab=planTab();
+  var _perkPlanData=null, _quirkPlanData=null, _fruitPlanData=null;
+  // Each plan reads the tab row of ITS OWN block, so switching tabs on one page leaves the others alone.
+  function planTab(host){
+    var box = host && host.closest ? host.closest(".persist") : null;
+    var t = (box||document).querySelector(".ptab[data-plantab].active");
+    return t?t.getAttribute("data-plantab"):"upcoming";
+  }
+  // opts.unit: print each open step's price in that currency (fruit tiers are bought one at a time,
+  // so the price of the next tier is what the banked seeds are measured against).
+  function planListHtml(arr, tab, opts){
+    opts=opts||{};
     var rows=(arr||[]).filter(function(p){ var done=(p.state==="done"); return tab==="purchased"?done:!done; });
-    if(!rows.length) return '<div class="hint" style="padding:4px 9px">'+(tab==="purchased"?"Nothing purchased from the guide yet.":"No upcoming guide steps for your chapter.")+'</div>';
-    var sw={done:"✓", current:"▶", queued:"·", chapter:"‧", diff:"‧"};
+    if(!rows.length) return '<div class="hint" style="padding:4px 9px">'+(tab==="purchased"?(opts.emptyDone||"Nothing purchased from the guide yet."):(opts.emptyUp||"No upcoming guide steps for your chapter."))+'</div>';
+    var sw={done:"✓", current:"▶", queued:"·", chapter:"‧", diff:"‧", cap:"‧", locked:"‧"};
     return rows.map(function(p){
       var st=p.state||"queued";
-      var right = st==="done"?"done": st==="current"?"buy now": st==="chapter"?("ch."+p.chapter): st==="diff"?"harder diff":"queued";
-      return '<div class="planrow '+st+'"><span class="ps">'+(sw[st]||"·")+'</span><span class="pn">'+esc(p.name)+'</span><span class="pt">'+esc(p.cur)+' → '+esc(p.target)+'</span><span class="pr">'+right+'</span></div>';
+      var right = st==="done"?"done": st==="current"?"buy now": st==="chapter"?("ch."+p.chapter): st==="diff"?"harder diff"
+                : st==="cap"?"tier cap": st==="locked"?"locked":"queued";
+      var price = opts.unit && st!=="done" && p.cost ? ' · '+esc(p.cost)+' '+opts.unit : '';
+      return '<div class="planrow '+st+'"><span class="ps">'+(sw[st]||"·")+'</span><span class="pn">'+esc(p.name)+'</span><span class="pt">'+esc(p.cur)+' → '+esc(p.target)+price+'</span><span class="pr">'+right+'</span></div>';
     }).join("");
   }
+  var FRUIT_PLAN_OPTS={ unit:"seeds", emptyUp:"Every fruit tier in the guide's order is bought.", emptyDone:"No fruit tier from the guide's order bought yet." };
   function drawPlans(){
-    var pp=$("perkPlanList"); if(pp && _perkPlanData) pp.innerHTML = planListHtml(_perkPlanData);
-    var qp=$("quirkPlanList"); if(qp && _quirkPlanData) qp.innerHTML = planListHtml(_quirkPlanData);
+    var pp=$("perkPlanList"); if(pp && _perkPlanData) pp.innerHTML = planListHtml(_perkPlanData, planTab(pp));
+    var qp=$("quirkPlanList"); if(qp && _quirkPlanData) qp.innerHTML = planListHtml(_quirkPlanData, planTab(qp));
+    var fp=$("fruitPlanList"); if(fp && _fruitPlanData) fp.innerHTML = planListHtml(_fruitPlanData, planTab(fp), FRUIT_PLAN_OPTS);
   }
   function renderPlans(s){
     if(s.perkPlan) _perkPlanData=s.perkPlan;
     if(s.quirkPlan) _quirkPlanData=s.quirkPlan;
+    if(s.fruitPlan) _fruitPlanData=s.fruitPlan;
     drawPlans();
   }
   document.addEventListener("click", function(e){
