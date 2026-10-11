@@ -497,6 +497,23 @@ namespace NGUAdvisor.Managers
 
         // Everything the search reads off the game, as the plain-old data GearSolver takes. MUST be
         // called on the main thread.
+        // The sets worth projecting onto, each scored for Power AND Toughness as a whole set: the
+        // best for either stat alone and the best for the two together.
+        public static List<GearProjection.Candidate> ProjectionCandidates(GearObjectives.Objective pow,
+                                                                         GearObjectives.Objective tou)
+        {
+            var inp = LiveInputs();
+            var list = new List<GearProjection.Candidate>(3);
+            foreach (var target in new[] { pow, tou, FindObjective("Adventure") })
+            {
+                if (target == null) continue;
+                var r = GearSolver.Solve(inp, target, false);
+                if (r == null) continue;
+                list.Add(new GearProjection.Candidate(QuestGearSet.ScoreOf(inp, r, pow), QuestGearSet.ScoreOf(inp, r, tou)));
+            }
+            return list;
+        }
+
         private static GearSolver.Inputs LiveInputs()
         {
             var idToItem = new Dictionary<int, GearScorer.Item>();

@@ -686,30 +686,34 @@ namespace NGUAdvisor.Managers
             return false;
         }
 
-        // Would the optimizer's best Power/Toughness gear clear a requirement current gear can't?
-        // Attack scales ~linearly with the Power stat, so best/current objective-score ratios are a
-        // sound projection multiplier. Cached: two optimizer runs are heavy.
-        private static double _projAtkMult = 1, _projDefMult = 1;
+        // Would the optimizer's best gear clear a requirement current gear can't? Attack scales
+        // ~linearly with the Power stat and defence with Toughness, so best/current score ratios are a
+        // sound projection multiplier - as long as both come from ONE set (GearProjection).
+        //
+        // Cached, because the optimizer runs are heavy, and tied to the gear the ratios were measured
+        // against: they multiply the LIVE attack and defence, so a ratio taken in a gold-drop set is
+        // meaningless a minute later in the titan set. A change in what is worn drops the cache.
+        private static double _projAtkMult = 1, _projDefMult = 1, _projCurP = -1, _projCurT = -1;
         private static DateTime _projAt = DateTime.MinValue;
 
         public static void ProjectedBestGear(out double atkMult, out double defMult)
         {
-            if ((DateTime.UtcNow - _projAt).TotalSeconds > 120)
+            try
             {
-                _projAt = DateTime.UtcNow;
-                try
+                var pow = GearOptimizer.FindObjective("Power");
+                var tou = GearOptimizer.FindObjective("Toughness");
+                double curP = GearOptimizer.CurrentScore(pow);
+                double curT = GearOptimizer.CurrentScore(tou);
+                bool sameGear = curP == _projCurP && curT == _projCurT;
+                if (!sameGear || (DateTime.UtcNow - _projAt).TotalSeconds > 120)
                 {
-                    var pow = GearOptimizer.FindObjective("Power");
-                    var tou = GearOptimizer.FindObjective("Toughness");
-                    double curP = GearOptimizer.CurrentScore(pow);
-                    double curT = GearOptimizer.CurrentScore(tou);
-                    var bestP = GearOptimizer.Optimize(pow);
-                    var bestT = GearOptimizer.Optimize(tou);
-                    _projAtkMult = curP > 0 && bestP != null && bestP.Score > curP ? bestP.Score / curP : 1;
-                    _projDefMult = curT > 0 && bestT != null && bestT.Score > curT ? bestT.Score / curT : 1;
+                    _projAt = DateTime.UtcNow;
+                    _projCurP = curP; _projCurT = curT;
+                    GearProjection.Pick(curP, curT, GearOptimizer.ProjectionCandidates(pow, tou),
+                        out _projAtkMult, out _projDefMult);
                 }
-                catch { _projAtkMult = 1; _projDefMult = 1; }
             }
+            catch { _projAtkMult = 1; _projDefMult = 1; _projCurP = -1; _projCurT = -1; }
             atkMult = _projAtkMult;
             defMult = _projDefMult;
         }
