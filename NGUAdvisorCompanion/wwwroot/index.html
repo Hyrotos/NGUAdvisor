@@ -325,7 +325,7 @@
   .planlist { display: flex; flex-direction: column; gap: var(--sp-1); max-width: 560px; margin-top: 4px; }
   .planrow { display: flex; align-items: center; gap: var(--sp-2); padding: 4px 9px; border-radius: 6px; font-size: var(--fs-3); }
   .planrow .ps { width: 13px; text-align: center; color: var(--faint); }
-  .planrow .pn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .planrow .pn { flex: 1; min-width: 0; margin: 0 -.2em; padding: 0 .2em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .planrow .pt { font-family: var(--sans); font-size: var(--fs-2); color: var(--faint); font-variant-numeric: tabular-nums; }
   .planrow .pr { font-family: var(--mono); font-size: var(--fs-1); letter-spacing: .05em; color: var(--faint); min-width: 50px; text-align: right; }
   .planrow.done { opacity: .7; }   /* E11: .45 = 2.63:1. A purchased perk's name still has to be readable. */
@@ -374,7 +374,9 @@
   .ftile .ft-poop { position: absolute; top: 5px; right: 6px; width: 7px; height: 7px; border-radius: 50%;
                     z-index: 2; background: transparent; border: 1px solid var(--faint); }
   .ftile .ft-poop.rec { background: #8a5a2b; border-color: #c98f4e; box-shadow: 0 0 0 2px rgba(138,90,43,.28); }
-  .ftile .ft-name { font-family: var(--sans); font-size: var(--fs-2); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* The negative margin + equal padding is the .crumb h1 fix: overflow:hidden clips at the box edge,
+     and this face's capitals reach a little left of it, so the first letter lost its edge. */
+  .ftile .ft-name { margin: 0 -.2em; padding: 0 .2em; font-family: var(--sans); font-size: var(--fs-2); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ftile .ft-meta { margin-left: auto; font-family: var(--sans); font-size: var(--fs-1); color: var(--muted); flex: none; }
   .ftile.t-even .ft-fill { background: var(--ok); }
   .ftile.t-odd  .ft-fill { background: var(--accent); }
