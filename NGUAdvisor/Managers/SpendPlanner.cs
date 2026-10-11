@@ -33,6 +33,7 @@ namespace NGUAdvisor.Managers
             public long CurLevel;
             public long Target;
             public long Cost;
+            public long Total;     // fruits only: every tier this step still has to buy (0 = not given)
             public int MinChapter;
             public string State;   // "done" | "current" | "queued" | "chapter" | "diff"
         }
@@ -576,13 +577,21 @@ namespace NGUAdvisor.Managers
                 int chapter = Chapter();
                 int cap = ycon.capTier();
                 bool currentSet = false;
+                var planned = new Dictionary<int, long>();   // fruit id -> highest target an earlier step names
                 foreach (var step in FruitPlan)
                 {
                     int id = FindByName(ycon.fruitName, step.Match, "fruit");
                     if (id < 0 || id >= fruits.Count || id >= ycon.baseSeedCost.Count) continue;
                     long tier = fruits[id].maxTier;
-                    var ps = new PlanStep { Id = id, Name = ycon.fruitName[id]?.Trim(), CurLevel = tier, Target = step.Target, MinChapter = step.MinChapter };
-                    ps.Cost = ycon.baseSeedCost[id] * (long)Math.Ceiling(Math.Pow(tier + 1, 2));
+                    planned.TryGetValue(id, out long earlier);
+                    long from = FruitPlanState.StartTier(tier, earlier);
+                    if (step.Target > earlier) planned[id] = step.Target;
+                    // A step an earlier row already covers in full (the guide repeats "Gold 10" across
+                    // chapters) would read "10 -> 10" while still open: leave it to the earlier row.
+                    if (from >= step.Target && tier < step.Target) continue;
+                    var ps = new PlanStep { Id = id, Name = ycon.fruitName[id]?.Trim(), CurLevel = Math.Min(from, step.Target), Target = step.Target, MinChapter = step.MinChapter };
+                    ps.Cost = FruitPlanState.TierCost(ycon.baseSeedCost[id], from);
+                    ps.Total = FruitPlanState.TotalCost(ycon.baseSeedCost[id], from, step.Target);
                     ps.State = FruitPlanState.Classify(tier, step.Target, chapter, step.MinChapter, cap, step.MinCap,
                         tier > 0 || CanUnlockFruit(c, ycon.fruitName[id]), ref currentSet);
                     outp.Add(ps);

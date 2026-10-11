@@ -3019,8 +3019,8 @@
     var t = (box||document).querySelector(".ptab[data-plantab].active");
     return t?t.getAttribute("data-plantab"):"upcoming";
   }
-  // opts.unit: print each open step's price in that currency (fruit tiers are bought one at a time,
-  // so the price of the next tier is what the banked seeds are measured against).
+  // opts.unit: print each open step's price in that currency. Fruit tiers are bought one at a time,
+  // so a step shows the price of its next tier and, where it spans several, of all of them.
   function planListHtml(arr, tab, opts){
     opts=opts||{};
     var rows=(arr||[]).filter(function(p){ var done=(p.state==="done"); return tab==="purchased"?done:!done; });
@@ -3030,7 +3030,10 @@
       var st=p.state||"queued";
       var right = st==="done"?"done": st==="current"?"buy now": st==="chapter"?("ch."+p.chapter): st==="diff"?"harder diff"
                 : st==="cap"?"tier cap": st==="locked"?"locked":"queued";
-      var price = opts.unit && st!=="done" && p.cost ? ' · '+esc(p.cost)+' '+opts.unit : '';
+      // One tier and the whole step, when they differ: "next 800 · all 2.1K seeds".
+      var price = !(opts.unit && st!=="done" && p.cost) ? ''
+                : (p.total && p.total!==p.cost) ? ' · next '+esc(p.cost)+' · all '+esc(p.total)+' '+opts.unit
+                : ' · '+esc(p.cost)+' '+opts.unit;
       return '<div class="planrow '+st+'"><span class="ps">'+(sw[st]||"·")+'</span><span class="pn">'+esc(p.name)+'</span><span class="pt">'+esc(p.cur)+' → '+esc(p.target)+price+'</span><span class="pr">'+right+'</span></div>';
     }).join("");
   }

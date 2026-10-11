@@ -3316,6 +3316,7 @@ namespace NGUAdvisor.Managers
                     o["cur"] = FormatBig(s.CurLevel);
                     o["target"] = s.Target == long.MaxValue ? "max" : s.Target.ToString(CultureInfo.InvariantCulture);
                     o["cost"] = FormatBig(s.Cost);
+                    if (s.Total > 0) o["total"] = FormatBig(s.Total);
                     o["chapter"] = s.MinChapter;
                     o["state"] = s.State ?? "";
                     arr.Add(o);

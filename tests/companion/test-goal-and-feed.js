@@ -164,8 +164,8 @@ setTimeout(() => {
                   { name: "Later Perk", cur: "0", target: "5", cost: "3", chapter: 2, state: "current" } ],
       fruitPlan: [
         { name: "Fruit of Gold", cur: "10", target: "10", cost: "1.2K", chapter: 3, state: "done" },
-        { name: "Fruit of Pomegranate", cur: "3", target: "5", cost: "800", chapter: 3, state: "current" },
-        { name: "Fruit of Luck", cur: "0", target: "1", cost: "50", chapter: 3, state: "queued" },
+        { name: "Fruit of Pomegranate", cur: "3", target: "5", cost: "800", total: "2.1K", chapter: 3, state: "current" },
+        { name: "Fruit of Luck", cur: "0", target: "1", cost: "50", total: "50", chapter: 3, state: "queued" },
         { name: "Fruit of Gold", cur: "10", target: "24", cost: "9K", chapter: 3, state: "cap" },
         { name: "Fruit of Numbers", cur: "0", target: "24", cost: "1M", chapter: 3, state: "locked" },
         { name: "Fruit of Quirks", cur: "0", target: "4", cost: "5M", chapter: 5, state: "chapter" } ] });
@@ -173,7 +173,9 @@ setTimeout(() => {
     ok("the fruit plan is the last block on the Yggdrasil page",
        window.document.querySelector("#view-yggdrasil").lastElementChild.contains(list()));
     ok("upcoming lists every step still to buy, in order", rows().length === 5 && /Pomegranate/.test(rows()[0].textContent), list().textContent);
-    ok("the next tier is marked with its seed price", rows()[0].classList.contains("current") && /3 → 5 · 800 seeds/.test(rows()[0].textContent) && /buy now/.test(rows()[0].textContent), rows()[0].textContent);
+    ok("the next step is marked, with the price of one tier and of all of them", rows()[0].classList.contains("current") && /3 → 5 · next 800 · all 2\.1K seeds/.test(rows()[0].textContent) && /buy now/.test(rows()[0].textContent), rows()[0].textContent);
+    ok("a one-tier step shows a single price", /0 → 1 · 50 seeds/.test(rows()[1].textContent) && !/next|all/.test(rows()[1].querySelector(".pt").textContent), rows()[1].textContent);
+    ok("a step without a total still shows its tier price", /10 → 24 · 9K seeds/.test(rows()[2].textContent), rows()[2].textContent);
     ok("a cap-held step says so", /tier cap/.test(rows()[2].textContent), rows()[2].textContent);
     ok("a fruit that cannot be unlocked yet says so", /locked/.test(rows()[3].textContent), rows()[3].textContent);
     ok("a later-chapter step names the chapter", /ch\.5/.test(rows()[4].textContent), rows()[4].textContent);
