@@ -156,7 +156,8 @@ setTimeout(() => {
   // Yggdrasil page: the guide's fruit-tier order as a plan, with the reason a step is held back.
   {
     const list = () => $("fruitPlanList");
-    const rows = () => Array.from(list().querySelectorAll(".planrow"));
+    const rows = () => Array.from(list().querySelectorAll(".planrow:not(.head)"));
+    const cells = r => Array.from(r.querySelectorAll(".pt, .pc")).map(e => e.textContent).join("|");
     const tab = (view, name) => window.document.querySelector('#view-' + view + ' .ptab[data-plantab="' + name + '"]')
       .dispatchEvent(new window.Event("click", { bubbles: true }));
     send({ goal: {},
@@ -173,18 +174,24 @@ setTimeout(() => {
     ok("the fruit plan is the last block on the Yggdrasil page",
        window.document.querySelector("#view-yggdrasil").lastElementChild.contains(list()));
     ok("upcoming lists every step still to buy, in order", rows().length === 5 && /Pomegranate/.test(rows()[0].textContent), list().textContent);
-    ok("the next step is marked, with the price of one tier and of all of them", rows()[0].classList.contains("current") && /3 → 5 · next 800 · all 2\.1K seeds/.test(rows()[0].textContent) && /buy now/.test(rows()[0].textContent), rows()[0].textContent);
-    ok("a one-tier step shows a single price", /0 → 1 · 50 seeds/.test(rows()[1].textContent) && !/next|all/.test(rows()[1].querySelector(".pt").textContent), rows()[1].textContent);
-    ok("a step without a total still shows its tier price", /10 → 24 · 9K seeds/.test(rows()[2].textContent), rows()[2].textContent);
+    ok("the next step is marked", rows()[0].classList.contains("current") && /buy now/.test(rows()[0].textContent), rows()[0].textContent);
+    ok("step, next-tier price and whole-step price sit in three columns", cells(rows()[0]) === "3 → 5|800|2.1K", cells(rows()[0]));
+    ok("a one-tier step fills both price columns the same", cells(rows()[1]) === "0 → 1|50|50", cells(rows()[1]));
+    ok("a step without a total falls back to its tier price", cells(rows()[2]) === "10 → 24|9K|9K", cells(rows()[2]));
+    ok("every row has the same columns, under a heading row",
+       rows().every(r => r.querySelectorAll(".pc").length === 2) && /TIER/.test(list().querySelector(".planrow.head").textContent)
+       && /NEXT TIER.*ALL TIERS/.test(list().querySelector(".planrow.head").textContent), list().querySelector(".planrow.head").textContent);
     ok("a cap-held step says so", /tier cap/.test(rows()[2].textContent), rows()[2].textContent);
     ok("a fruit that cannot be unlocked yet says so", /locked/.test(rows()[3].textContent), rows()[3].textContent);
     ok("a later-chapter step names the chapter", /ch\.5/.test(rows()[4].textContent), rows()[4].textContent);
 
     tab("yggdrasil", "purchased");
+    ok("a bought step has no price left", cells(rows()[0]) === "10 → 10||", cells(rows()[0]));
     ok("purchased shows the bought tiers", rows().length === 1 && /Fruit of Gold/.test(rows()[0].textContent) && /done/.test(rows()[0].textContent), list().textContent);
     ok("switching tabs on Yggdrasil leaves Perks on its own tab", /Later Perk/.test($("perkPlanList").textContent) && !/Newbie Perk/.test($("perkPlanList").textContent), $("perkPlanList").textContent);
     tab("perks", "purchased");
     ok("and the other way round", /Newbie Perk/.test($("perkPlanList").textContent) && rows().length === 1, $("perkPlanList").textContent);
+    ok("the unpriced perk plan keeps its plain rows", !$("perkPlanList").querySelector(".pc, .head"));
     tab("perks", "upcoming"); tab("yggdrasil", "upcoming");
   }
 

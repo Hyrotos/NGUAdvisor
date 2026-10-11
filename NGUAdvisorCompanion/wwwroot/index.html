@@ -332,6 +332,12 @@
   .planrow.current { background: var(--accent-bg); }
   .planrow.current .pr, .planrow.current .ps { color: var(--accent); }
   .planrow.chapter, .planrow.diff, .planrow.cap, .planrow.locked { opacity: .68; }
+  /* Priced plans (fruit tiers) are a table: the tier step and the two prices each keep a fixed
+     column, so they line up down the list whatever the fruit is called. */
+  .planrow.cols .pt { width: 62px; text-align: right; }
+  .planrow .pc { font-family: var(--sans); font-size: var(--fs-2); color: var(--faint); font-variant-numeric: tabular-nums; width: 74px; text-align: right; }
+  .planrow.head { font-size: var(--fs-1); letter-spacing: .05em; color: var(--faint); padding-bottom: 0; }
+  .planrow.head .pn, .planrow.head .pt, .planrow.head .pc { font-family: var(--mono); font-size: var(--fs-1); }
   .planrow.skip { opacity: .68; }
   .planrow.afford .pt { color: var(--ok); }
   .plantier { font-family: var(--mono); font-size: var(--fs-1); letter-spacing: .08em; color: var(--faint); padding: 8px 9px 0; }
@@ -2065,7 +2071,7 @@
         // back says by what: the chapter, the fruit's own unlock, or the Yggdrasil tier cap.
         // `tail`, not `persist`: it is the longest block on the page, so it goes below the settings.
         tail:
-          '<div class="seclabel"><span class="eyebrow">Guide plan · fruit tiers in buying order</span></div>'+
+          '<div class="seclabel"><span class="eyebrow">Guide plan · fruit tiers in buying order · prices in seeds</span></div>'+
           '<div class="ptabs"><button class="ptab active" type="button" data-plantab="upcoming">Upcoming</button><button class="ptab" type="button" data-plantab="purchased">Purchased</button></div>'+
           '<div class="planlist" id="fruitPlanList"></div>' },
       blood:       { grp:"Growth", title:"Blood", cons:"BloodPanel", sev:"ok", badge:"Auto",
@@ -3019,25 +3025,28 @@
     var t = (box||document).querySelector(".ptab[data-plantab].active");
     return t?t.getAttribute("data-plantab"):"upcoming";
   }
-  // opts.unit: print each open step's price in that currency. Fruit tiers are bought one at a time,
-  // so a step shows the price of its next tier and, where it spans several, of all of them.
+  // opts.unit: the plan is priced in that currency. Fruit tiers are bought one at a time, so a step
+  // shows the price of its next tier and of all the tiers it still buys, each in its own column.
   function planListHtml(arr, tab, opts){
     opts=opts||{};
     var rows=(arr||[]).filter(function(p){ var done=(p.state==="done"); return tab==="purchased"?done:!done; });
     if(!rows.length) return '<div class="hint" style="padding:4px 9px">'+(tab==="purchased"?(opts.emptyDone||"Nothing purchased from the guide yet."):(opts.emptyUp||"No upcoming guide steps for your chapter."))+'</div>';
     var sw={done:"✓", current:"▶", queued:"·", chapter:"‧", diff:"‧", cap:"‧", locked:"‧"};
-    return rows.map(function(p){
+    // A priced plan is laid out in columns under a heading row: step, price of the next tier,
+    // price of every tier the step still buys. Bought steps have nothing left to price.
+    var cols=!!opts.unit;
+    var head = cols ? '<div class="planrow cols head"><span class="ps"></span><span class="pn">'+esc(opts.nameHead||"")+'</span><span class="pt">'+esc(opts.stepHead||"")+'</span>'
+                      +'<span class="pc">NEXT TIER</span><span class="pc">ALL TIERS</span><span class="pr"></span></div>' : '';
+    return head + rows.map(function(p){
       var st=p.state||"queued";
       var right = st==="done"?"done": st==="current"?"buy now": st==="chapter"?("ch."+p.chapter): st==="diff"?"harder diff"
                 : st==="cap"?"tier cap": st==="locked"?"locked":"queued";
-      // One tier and the whole step, when they differ: "next 800 · all 2.1K seeds".
-      var price = !(opts.unit && st!=="done" && p.cost) ? ''
-                : (p.total && p.total!==p.cost) ? ' · next '+esc(p.cost)+' · all '+esc(p.total)+' '+opts.unit
-                : ' · '+esc(p.cost)+' '+opts.unit;
-      return '<div class="planrow '+st+'"><span class="ps">'+(sw[st]||"·")+'</span><span class="pn">'+esc(p.name)+'</span><span class="pt">'+esc(p.cur)+' → '+esc(p.target)+price+'</span><span class="pr">'+right+'</span></div>';
+      var open = st!=="done" && p.cost;
+      var prices = !cols ? '' : '<span class="pc">'+(open?esc(p.cost):"")+'</span><span class="pc">'+(open?esc(p.total||p.cost):"")+'</span>';
+      return '<div class="planrow '+st+(cols?" cols":"")+'"><span class="ps">'+(sw[st]||"·")+'</span><span class="pn">'+esc(p.name)+'</span><span class="pt">'+esc(p.cur)+' → '+esc(p.target)+'</span>'+prices+'<span class="pr">'+right+'</span></div>';
     }).join("");
   }
-  var FRUIT_PLAN_OPTS={ unit:"seeds", emptyUp:"Every fruit tier in the guide's order is bought.", emptyDone:"No fruit tier from the guide's order bought yet." };
+  var FRUIT_PLAN_OPTS={ unit:"seeds", nameHead:"FRUIT", stepHead:"TIER", emptyUp:"Every fruit tier in the guide's order is bought.", emptyDone:"No fruit tier from the guide's order bought yet." };
   function drawPlans(){
     var pp=$("perkPlanList"); if(pp && _perkPlanData) pp.innerHTML = planListHtml(_perkPlanData, planTab(pp));
     var qp=$("quirkPlanList"); if(qp && _quirkPlanData) qp.innerHTML = planListHtml(_quirkPlanData, planTab(qp));
