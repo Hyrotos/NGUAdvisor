@@ -133,9 +133,19 @@ namespace NGUAdvisor.Managers
             new Step("Beasted Boosts II", 0, 5),              // guide ch5: "Beasted Boosts 2"
         };
 
-        // ---- Yggdrasil fruit tier order (guide ch3 + ch4 sequence, ch5 Evil order, ch7 mayo) ----
+        // ---- Yggdrasil fruit tier order (guide ch2 opening, ch3 + ch4 sequence, ch5 Evil order, ch7 mayo) ----
         private static readonly Step[] FruitPlan =
         {
+            // guide ch2: FoG 2 -> FoPa 1 -> FoA 1 -> Pom 1 -> FoPa 2 -> FoG 4 -> Pom 3 -> FoG 10. Without
+            // these the plan was silent for the whole chapter in which the first seeds come in.
+            new Step("Gold", 2, 2),
+            new Step("Power α", 1, 2),
+            new Step("Adventure", 1, 2),
+            new Step("Pomegranate", 1, 2),
+            new Step("Power α", 2, 2),
+            new Step("Gold", 4, 2),
+            new Step("Pomegranate", 3, 2),
+            new Step("Gold", 10, 2),
             new Step("Gold", 10, 3),
             new Step("Pomegranate", 5, 3),
             new Step("Knowledge", 1, 3),
