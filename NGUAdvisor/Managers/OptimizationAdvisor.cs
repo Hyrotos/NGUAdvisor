@@ -718,6 +718,19 @@ namespace NGUAdvisor.Managers
             defMult = _projDefMult;
         }
 
+        // The attack and defence the best wearable set would give, from the live stats.
+        public static void ProjectedKillStats(out double attack, out double defense)
+        {
+            attack = 0; defense = 0;
+            try
+            {
+                ProjectedBestGear(out var am, out var dm);
+                attack = Main.Character.totalAdvAttack() * am;
+                defense = Main.Character.totalAdvDefense() * dm;
+            }
+            catch { }
+        }
+
         // Kill-ladder requirement (user rule): never killed -> the guide's MANUAL first-kill stats;
         // killed -> the guide's IDLE stats until met (skipped where the guide lists none); then the
         // game's exact AK stats, which from T4 up include the HP-regen gate (reqR; 0 elsewhere).

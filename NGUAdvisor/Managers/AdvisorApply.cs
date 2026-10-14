@@ -484,6 +484,12 @@ namespace NGUAdvisor.Managers
 
             var targets = new bool[ZoneHelpers.TitanZones.Length];
             targets[best] = done == null || best >= done.Length || !done[best];
+            // A bank the gold set already failed to collect in ten minutes waits like a kill does.
+            if (targets[best])
+            {
+                OptimizationAdvisor.ProjectedKillStats(out var ga, out var gd);
+                if (GivenUp(best, ga, gd)) targets[best] = false;
+            }
             var cur = Main.Settings.TitanGoldTargets;
             bool differs = cur == null || cur.Length != targets.Length;
             if (!differs)
@@ -612,6 +618,20 @@ namespace NGUAdvisor.Managers
 
         // Would the best projected kill set win a manual fight against this titan/version? A titan the
         // tables hold no row for (Tippi, Traitor) cannot be judged, so it stays queued as it always was.
+        private static readonly HashSet<int> _giveUpAnnounced = new HashSet<int>();
+
+        private static bool GivenUp(int titan, double attack, double defense)
+        {
+            int version = 1;
+            try { version = ZoneHelpers.TitanVersion(titan); } catch { }
+            bool blocked = TitanGiveUp.Blocks(titan, version, attack, defense, DateTime.UtcNow);
+            if (blocked && _giveUpAnnounced.Add(titan))
+                Main.Log($"Advisor: leaving titan {titan + 1} alone — it outlasted the kill gear for 10 minutes; " +
+                         $"next try after +{(TitanGiveUp.RetryGain - 1) * 100:0}% attack or defence, or in {TitanGiveUp.RetryAfter.TotalHours:0}h");
+            if (!blocked) _giveUpAnnounced.Remove(titan);
+            return blocked;
+        }
+
         private static bool TitanAttemptReady(Character c, int titanIndex, int version)
         {
             if (TitanTables.ManualRow(titanIndex, version) == null) return true;
@@ -686,9 +706,12 @@ namespace NGUAdvisor.Managers
                 int maxZone = ZoneHelpers.GetMaxReachableZone(true);
                 var targets = new bool[14];
                 var heldTargets = Main.Settings.TitanSwapTargets;
+                OptimizationAdvisor.ProjectedKillStats(out var killAtk, out var killDef);
                 for (int i = 0; i < ZoneHelpers.TitanZones.Length && i < 14; i++)
                 {
                     if (ZoneHelpers.TitanZones[i] > maxZone) continue;
+                    // Given up after ten minutes standing: stays out until it is a different fight.
+                    if (GivenUp(i, killAtk, killDef)) continue;
                     // Was an inline 6/7/8 chain that silently omitted titan9 (Exile), so a locked Exile stayed
                     // a swap target. Shared helper now, so the two paths can't drift apart again.
                     if (ZoneHelpers.RiddleLocked(i)) continue;

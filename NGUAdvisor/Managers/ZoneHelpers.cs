@@ -355,6 +355,13 @@ namespace NGUAdvisor.Managers
 
                     if (!reducedVersion)
                     {
+                        // Remembered, so the advisor's next target pass does not put it straight back.
+                        try
+                        {
+                            OptimizationAdvisor.ProjectedKillStats(out var ga, out var gd);
+                            TitanGiveUp.Record(titanIndex, TitanVersion(titanIndex), ga, gd, DateTime.UtcNow);
+                        }
+                        catch { }
                         if (currentSnapshot.ShouldUseGoldLoadout)
                         {
                             Log($"Disabling Titan {titanIndex} as a valid gold swap target");
