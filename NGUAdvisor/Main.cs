@@ -1218,10 +1218,16 @@ namespace NGUAdvisor
 
                     if (Settings.AutoBuyEM)
                     {
-                        var energy = ePurchase.customAllCost() > 0;
+                        // With the EXP page on Advisor, ExpBalancer buys Energy and Magic itself and only
+                        // MIRRORS its plan into these custom boxes. Buying the boxes as well spent the bank
+                        // a second time on whatever the mirror held -- cap and bars a few EXP at a time,
+                        // never a 150 EXP point of power -- so the walk could never save up for the stat
+                        // furthest behind. R3 is not the advisor's, so it still goes through here.
+                        bool emByHand = !Settings.AdvisorExpBuys;
+                        var energy = emByHand && ePurchase.customAllCost() > 0;
                         var r3 = Character.res3.res3On && r3Purchase.customAllCost() > 0;
                         // magic RESOURCE is permanent (only Augs/AT/TM/Blood re-lock on Evil) — highestBoss.
-                        var magic = Character.highestBoss >= 37 && mPurchase.customAllCost() > 0;
+                        var magic = emByHand && Character.highestBoss >= 37 && mPurchase.customAllCost() > 0;
 
                         if (energy)
                             total += ePurchase.customAllCost();

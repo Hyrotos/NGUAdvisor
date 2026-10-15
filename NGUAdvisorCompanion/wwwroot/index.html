@@ -1922,7 +1922,8 @@
         why:"",
         kind:"settings", groups:[
           { label:"EXP shop", controls:[
-            {t:"toggle", key:"AutoBuyEM", label:"Buy E/M with EXP"},
+            // On Advisor the walk buys E/M itself; this switch then only buys R3 from the game's custom boxes.
+            {t:"toggle", key:"AutoBuyEM", label:"Buy E/M with EXP (Manual: the game's custom amounts)"},
             {t:"toggle", key:"AutoBuyAdventure", label:"Buy Adventure with EXP"} ]},
           { label:"Set ratio", controls:[
             {t:"toggle", key:"ExpManualRatio", label:"Set ratio manually"},
